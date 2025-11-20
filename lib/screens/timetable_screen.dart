@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'add_course_screen.dart';
+import 'package:planit/screens/add_course_screen.dart';
 
 class TimetableScreen extends StatelessWidget {
   const TimetableScreen({super.key});

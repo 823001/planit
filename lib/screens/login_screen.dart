@@ -19,7 +19,7 @@ class LoginScreen extends StatelessWidget {
                 const SizedBox(height: 60),
 
                 const Text(
-                  'PlanIT 로그인',
+                  'PlanIT',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 32,
@@ -30,7 +30,7 @@ class LoginScreen extends StatelessWidget {
                 const SizedBox(height: 8),
 
                 const Text(
-                  '할 일을 효율적으로 관리하세요',
+                  '당신의 할 일을 보다 효율적으로 만드는 지름길',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,

@@ -1,13 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'timetable_screen.dart';
 import 'task_list_screen.dart';
 import 'attendance_screen.dart';
 import 'store_screen.dart';
 
-
-class MainScreen extends StatelessWidget {
+class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
+
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  int _points = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPoints();
+  }
+
+  Future<void> _loadPoints() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _points = prefs.getInt('points') ?? 0;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,9 +39,10 @@ class MainScreen extends StatelessWidget {
             padding: const EdgeInsets.only(right: 16.0),
             child: Chip(
               backgroundColor: Colors.black.withOpacity(0.2),
-              label: const Text(
-                '0P', 
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              label: Text(
+                '$_points P',
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -40,8 +61,8 @@ class MainScreen extends StatelessWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: 16,
-                crossAxisSpacing: 16, 
-                childAspectRatio: 0.9, 
+                crossAxisSpacing: 16,
+                childAspectRatio: 0.9,
                 children: [
                   _buildMenuButton(
                     context: context,
@@ -63,6 +84,7 @@ class MainScreen extends StatelessWidget {
                     title: '출석 체크',
                     subtitle: '매일 포인트 획득',
                     targetScreen: const AttendanceScreen(),
+                    onReturned: _loadPoints, // 출석 후 포인트 새로고침
                   ),
                   _buildMenuButton(
                     context: context,
@@ -74,7 +96,6 @@ class MainScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
-
               _buildStatsSection(),
             ],
           ),
@@ -89,6 +110,7 @@ class MainScreen extends StatelessWidget {
     required String title,
     required String subtitle,
     required Widget targetScreen,
+    VoidCallback? onReturned,
     bool isNew = false,
   }) {
     return GestureDetector(
@@ -96,46 +118,61 @@ class MainScreen extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => targetScreen),
-        );
+        ).then((_) {
+          if (onReturned != null) onReturned();
+        });
       },
       child: Container(
         padding: const EdgeInsets.all(16.0),
         decoration: BoxDecoration(
-          color: const Color(0xFF6768F0).withOpacity(0.2), 
+          color: const Color(0xFF6768F0).withOpacity(0.2),
           borderRadius: BorderRadius.circular(20.0),
         ),
         child: Stack(
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 40, color: Colors.white),
-                const SizedBox(height: 20),
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(fontSize: 14, color: Colors.white70),
-                ),
-              ],
+            // 여기서 중앙 정렬
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 40, color: Colors.white),
+                  const SizedBox(height: 16),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    textAlign: TextAlign.center,
+                    style:
+                    const TextStyle(fontSize: 14, color: Colors.white70),
+                  ),
+                ],
+              ),
             ),
-            if (isNew) 
+            if (isNew)
               Positioned(
                 top: 0,
                 right: 0,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.yellow[700],
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
                     'NEW',
-                    style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
+                    style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12),
                   ),
                 ),
               ),
@@ -145,6 +182,7 @@ class MainScreen extends StatelessWidget {
     );
   }
 
+  // _buildStatsSection / _buildStatBar는 기존 코드 그대로 사용
   Widget _buildStatsSection() {
     return Container(
       padding: const EdgeInsets.all(20.0),
@@ -157,7 +195,8 @@ class MainScreen extends StatelessWidget {
         children: [
           const Text(
             '이번주 학습 통계',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           const SizedBox(height: 20),
           _buildStatBar(title: '계획 진행률', value: 0.0, displayText: '0% 완료'),
@@ -187,12 +226,15 @@ class MainScreen extends StatelessWidget {
             ),
             Text(
               displayText,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        ClipRRect( 
+        ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: LinearProgressIndicator(
             value: value,
