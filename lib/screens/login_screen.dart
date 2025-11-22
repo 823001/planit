@@ -1,17 +1,78 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:planit/screens/register_screen.dart';
 import 'package:planit/screens/main_screen.dart';
 
-
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  bool _isLoading = false;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('아이디와 비밀번호를 입력해주세요.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final cred = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      print('로그인 성공: ${cred.user?.uid}');
+
+      // 여기까지 오면 로그인 성공한 것
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      print('로그인 에러: ${e.code} / ${e.message}');
+      String message = '로그인 중 오류가 발생했습니다.';
+
+      if (e.code == 'user-not-found') {
+        message = '존재하지 않는 계정입니다. (회원가입 먼저 해주세요)';
+      } else if (e.code == 'wrong-password') {
+        message = '비밀번호가 일치하지 않습니다.';
+      } else if (e.code == 'invalid-email') {
+        message = '이메일 형식이 올바르지 않습니다.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (e) {
+      print('알 수 없는 로그인 에러: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('알 수 없는 오류가 발생했습니다: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0), 
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -40,14 +101,15 @@ class LoginScreen extends StatelessWidget {
                 const SizedBox(height: 48),
 
                 const Text(
-                  '아이디',
+                  '아이디 (이메일)',
                   style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
 
-                const TextField(
-                  decoration: InputDecoration(
-                    hintText: '사용자 아이디 입력',
+                TextField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    hintText: '이메일 입력',
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -58,9 +120,10 @@ class LoginScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
 
-                const TextField(
+                TextField(
+                  controller: _passwordController,
                   obscureText: true,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     hintText: '비밀번호 입력',
                     helperText: '영문, 숫자, 특수문자 조합 8자 이상',
                   ),
@@ -68,13 +131,10 @@ class LoginScreen extends StatelessWidget {
                 const SizedBox(height: 32),
 
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const MainScreen()),
-                    );
-                  },
-                  child: const Text(
+                  onPressed: _isLoading ? null : _login,
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
                     '로그인하기',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
@@ -83,7 +143,7 @@ class LoginScreen extends StatelessWidget {
 
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(255, 59, 58, 112), 
+                    backgroundColor: const Color.fromARGB(255, 59, 58, 112),
                     elevation: 0,
                   ),
                   onPressed: () {
@@ -100,7 +160,7 @@ class LoginScreen extends StatelessWidget {
 
                 const SizedBox(height: 40),
 
-                _buildPermissionBox(), 
+                _buildPermissionBox(),
 
                 const SizedBox(height: 40),
               ],
@@ -115,7 +175,7 @@ class LoginScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20.0),
       decoration: BoxDecoration(
-        color: const Color.fromARGB(255, 59, 58, 112).withOpacity(0.5), 
+        color: const Color.fromARGB(255, 59, 58, 112).withOpacity(0.5),
         borderRadius: BorderRadius.circular(15.0),
       ),
       child: Column(
@@ -138,9 +198,7 @@ class LoginScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: () {
-            
-            },
+            onPressed: () {},
             child: const Text(
               '✓ 알림 허용하기',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
