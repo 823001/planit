@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -19,6 +20,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   bool _isYearPickerOpen = false;
   bool _isMonthPickerOpen = false;
 
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   @override
   void initState() {
     super.initState();
@@ -30,24 +34,77 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('attendanceDates') ?? [];
-    final pts = prefs.getInt('points') ?? 0;
+    final user = _auth.currentUser;
 
-    setState(() {
-      _checkedDates = list.toSet();
-      _points = pts;
-      _isLoading = false;
-    });
-  }
+    if (user == null) {
+      // 로그인 안 되어 있으면 안내만 하고 종료
+      setState(() {
+        _isLoading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('출석 기능을 이용하려면 먼저 로그인 해주세요.')),
+        );
+      });
+      return;
+    }
 
-  Future<void> _saveData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('attendanceDates', _checkedDates.toList());
-    await prefs.setInt('points', _points);
+    try {
+      final uid = user.uid;
+
+      // 유저 포인트 불러오기
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      int points = 0;
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        final p = data?['points'];
+        if (p is int) {
+          points = p;
+        } else if (p is num) {
+          points = p.toInt();
+        }
+      }
+
+      // 출석 내역 전체 불러오기
+      final attendanceSnap = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('attendance')
+          .get();
+
+      final checked = <String>{};
+      for (var doc in attendanceSnap.docs) {
+        final data = doc.data();
+        if (data['checked'] == true) {
+          checked.add(doc.id); // 문서 ID를 날짜 키로 사용
+        }
+      }
+
+      setState(() {
+        _points = points;
+        _checkedDates = checked;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('출석 데이터 로드 에러: $e');
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('출석 정보를 불러오는 중 오류가 발생했습니다.')),
+      );
+    }
   }
 
   Future<void> _checkToday() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('먼저 로그인해주세요.')),
+      );
+      return;
+    }
+
     final today = DateTime.now();
     final key = _dateKey(today);
 
@@ -62,11 +119,42 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _checkedDates.add(key);
       _points += dailyReward;
     });
-    await _saveData();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('출석 완료! 5P가 적립되었습니다.')),
-    );
+    try {
+      final uid = user.uid;
+
+      // 포인트 업데이트
+      await _firestore.collection('users').doc(uid).set({
+        'points': _points,
+      }, SetOptions(merge: true));
+
+      // 오늘 출석 기록
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('attendance')
+          .doc(key)
+          .set({
+        'checked': true,
+        'checkedAt': FieldValue.serverTimestamp(),
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('출석 완료! 5P가 적립되었습니다.')),
+      );
+    } catch (e) {
+      print('출석 저장 에러: $e');
+
+      // 실패 시 UI 롤백
+      setState(() {
+        _checkedDates.remove(key);
+        _points -= dailyReward;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('출석 저장 중 오류가 발생했습니다. 다시 시도해주세요.')),
+      );
+    }
   }
 
   void _changeMonth(int offset) {
@@ -217,7 +305,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       Text(
                         '${_currentMonth.month}월',
                         style: const TextStyle(
-                          fontSize: 15, // ★ 줄임
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
@@ -360,7 +448,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         crossAxisCount: 7,
         mainAxisSpacing: 0,
         crossAxisSpacing: 0,
-        childAspectRatio: 1.3, // ★ 수정됨
+        childAspectRatio: 1.3,
       ),
       itemBuilder: (context, index) {
         if (index < startOffset) {

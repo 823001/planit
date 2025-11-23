@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'timetable_screen.dart';
 import 'task_list_screen.dart';
@@ -16,17 +17,50 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _points = 0;
 
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   @override
   void initState() {
     super.initState();
     _loadPoints();
   }
 
+  // Firestore에서 포인트 불러오기
   Future<void> _loadPoints() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _points = prefs.getInt('points') ?? 0;
-    });
+    final user = _auth.currentUser;
+
+    // 로그인 안 되어 있으면 0P로
+    if (user == null) {
+      setState(() {
+        _points = 0;
+      });
+      return;
+    }
+
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+
+      int points = 0;
+      if (doc.exists) {
+        final data = doc.data();
+        final p = data?['points'];
+        if (p is int) {
+          points = p;
+        } else if (p is num) {
+          points = p.toInt();
+        }
+      }
+
+      setState(() {
+        _points = points;
+      });
+    } catch (e) {
+      print('포인트 로드 오류: $e');
+      setState(() {
+        _points = 0;
+      });
+    }
   }
 
   @override
@@ -42,7 +76,9 @@ class _MainScreenState extends State<MainScreen> {
               label: Text(
                 '$_points P',
                 style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold),
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -130,7 +166,7 @@ class _MainScreenState extends State<MainScreen> {
         ),
         child: Stack(
           children: [
-            // 여기서 중앙 정렬
+            // 중앙 정렬
             Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -142,16 +178,19 @@ class _MainScreenState extends State<MainScreen> {
                     title,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
                     textAlign: TextAlign.center,
-                    style:
-                    const TextStyle(fontSize: 14, color: Colors.white70),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.white70,
+                    ),
                   ),
                 ],
               ),
@@ -170,9 +209,10 @@ class _MainScreenState extends State<MainScreen> {
                   child: const Text(
                     'NEW',
                     style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12),
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ),
@@ -182,7 +222,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // _buildStatsSection / _buildStatBar는 기존 코드 그대로 사용
   Widget _buildStatsSection() {
     return Container(
       padding: const EdgeInsets.all(20.0),
@@ -196,7 +235,10 @@ class _MainScreenState extends State<MainScreen> {
           const Text(
             '이번주 학습 통계',
             style: TextStyle(
-                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 20),
           _buildStatBar(title: '계획 진행률', value: 0.0, displayText: '0% 완료'),
@@ -227,9 +269,10 @@ class _MainScreenState extends State<MainScreen> {
             Text(
               displayText,
               style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white),
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
           ],
         ),
