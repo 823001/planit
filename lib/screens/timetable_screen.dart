@@ -1,6 +1,7 @@
-import 'dart:convert';
+// timetable_screen.dart
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:planit/screens/add_course_screen.dart';
 
 class TimetableScreen extends StatefulWidget {
@@ -11,7 +12,10 @@ class TimetableScreen extends StatefulWidget {
 }
 
 class _TimetableScreenState extends State<TimetableScreen> {
-  List<Map<String, dynamic>> _courses = [];
+  final _firestore = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
+
+  List<Map<String, dynamic>> _courses = []; // 각 강의 + docId 저장
   bool _isLoading = true;
 
   @override
@@ -21,27 +25,74 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   Future<void> _loadCourses() async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('로그인이 필요합니다.')),
+        );
+        if (mounted) Navigator.pop(context);
+        return;
+      }
 
-    final List<String> storedList = prefs.getStringList('saved_classes') ?? [];
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('courses')
+          .orderBy('day')
+          .orderBy('startTime')
+          .get();
 
-    setState(() {
-      _courses = storedList
-          .map((item) => jsonDecode(item) as Map<String, dynamic>)
-          .toList();
-      _isLoading = false;
-    });
+      setState(() {
+        _courses = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id; // 삭제용으로 docId 저장
+          return data;
+        }).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('시간표 불러오는 중 오류가 발생했습니다 : $e')),
+      );
+    }
   }
 
   Future<void> _deleteCourse(int index) async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('로그인이 필요합니다.')),
+        );
+        return;
+      }
 
-    setState(() {
-      _courses.removeAt(index);
-    });
+      final course = _courses[index];
+      final docId = course['id'] as String?;
 
-    List<String> newList = _courses.map((e) => jsonEncode(e)).toList();
-    await prefs.setStringList('saved_classes', newList);
+      if (docId == null) return;
+
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('courses')
+          .doc(docId)
+          .delete();
+
+      setState(() {
+        _courses.removeAt(index);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('강의가 삭제되었습니다.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('강의 삭제 중 오류가 발생했습니다 : $e')),
+      );
+    }
   }
 
   @override
@@ -60,15 +111,17 @@ class _TimetableScreenState extends State<TimetableScreen> {
             ),
             const SizedBox(height: 24),
 
+            // 강의 추가 버튼
             ElevatedButton(
               onPressed: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (context) => const AddCourseScreen()),
+                    builder: (context) => const AddCourseScreen(),
+                  ),
                 ).then((result) {
                   if (result == true) {
-                    _loadCourses();
+                    _loadCourses(); // 강의 추가 후 다시 로드
                   }
                 });
               },
@@ -123,6 +176,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // 강의 정보
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,17 +191,20 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${course['prof']} | ${course['room']}',
-                  style: const TextStyle(fontSize: 14, color: Colors.white70),
+                  '${course['prof'] ?? '-'} | ${course['room'] ?? '-'}',
+                  style:
+                  const TextStyle(fontSize: 14, color: Colors.white70),
                 ),
               ],
             ),
           ),
 
+          // 요일 / 시간 + 삭제 아이콘
           Column(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFF6768F0),
                   borderRadius: BorderRadius.circular(10),
@@ -157,15 +214,25 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     Text(
                       course['day'] ?? '-',
                       style: const TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white),
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${course['startTime']}~${course['endTime']}',
-                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                      '${course['startTime'] ?? ''}~${course['endTime'] ?? ''}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 8),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.white70),
+                onPressed: () => _deleteCourse(index),
               ),
             ],
           ),
