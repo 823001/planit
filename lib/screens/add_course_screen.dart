@@ -5,7 +5,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AddCourseScreen extends StatefulWidget {
-  const AddCourseScreen({super.key});
+  final Map<String, dynamic>? course; // 수정 시 기존 데이터
+  final String? courseId; // 수정 시 docId
+
+  const AddCourseScreen({
+    super.key,
+    this.course,
+    this.courseId,
+  });
+
+  bool get isEdit => course != null && courseId != null;
 
   @override
   State<AddCourseScreen> createState() => _AddCourseScreenState();
@@ -28,6 +37,26 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
   bool _isSaving = false;
 
   @override
+  void initState() {
+    super.initState();
+
+    // 수정 모드라면 초기값 세팅
+    if (widget.isEdit) {
+      final c = widget.course!;
+      _titleController.text = (c['title'] ?? '') as String;
+      _roomController.text = (c['room'] ?? '') as String;
+      _profController.text = (c['prof'] ?? '') as String;
+      _selectedDay = c['day'] as String?;
+      if (c['startTime'] != null) {
+        _startTime = _parseTime(c['startTime'] as String);
+      }
+      if (c['endTime'] != null) {
+        _endTime = _parseTime(c['endTime'] as String);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _roomController.dispose();
@@ -39,6 +68,13 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
     final h = time.hour.toString().padLeft(2, '0');
     final m = time.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  TimeOfDay _parseTime(String str) {
+    final parts = str.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    return TimeOfDay(hour: hour, minute: minute);
   }
 
   Future<void> _pickTime(bool isStart) async {
@@ -136,27 +172,40 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
 
     setState(() => _isSaving = true);
 
+    final isEdit = widget.isEdit;
+
+    final data = {
+      'title': _titleController.text,
+      'room': _roomController.text,
+      'prof': _profController.text,
+      'day': _selectedDay,
+      'startTime': _formatTime(_startTime!),
+      'endTime': _formatTime(_endTime!),
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+
     try {
-      await _firestore
+      final ref = _firestore
           .collection('users')
           .doc(user.uid)
-          .collection('courses')
-          .add({
-        'title': _titleController.text,
-        'room': _roomController.text,
-        'prof': _profController.text,
-        'day': _selectedDay,
-        'startTime': _formatTime(_startTime!),
-        'endTime': _formatTime(_endTime!),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+          .collection('courses');
+
+      if (isEdit) {
+        // 수정
+        await ref.doc(widget.courseId!).update(data);
+      } else {
+        // 신규 추가
+        await ref.add(data);
+      }
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('강의가 성공적으로 추가되었습니다.')),
+        SnackBar(
+            content: Text(
+                isEdit ? '강의가 수정되었습니다.' : '강의가 성공적으로 추가되었습니다.')),
       );
-      Navigator.pop(context, true); // true 넘겨서 시간표 화면에서 새로고침
+      Navigator.pop(context, true); // true => 시간표 화면에서 새로고침
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -169,9 +218,11 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEdit = widget.isEdit;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('강의 추가'),
+        title: Text(isEdit ? '강의 수정' : '강의 추가'),
         actions: [
           IconButton(
             icon: const Icon(Icons.close),
@@ -270,9 +321,9 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
                           color: Colors.white,
                         ),
                       )
-                          : const Text(
-                        '강의 추가',
-                        style: TextStyle(
+                          : Text(
+                        isEdit ? '강의 저장' : '강의 추가',
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
