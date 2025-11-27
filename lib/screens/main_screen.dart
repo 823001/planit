@@ -17,13 +17,24 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _points = 0;
 
+  double _taskProgress = 0.0;
+  double _assignmentRate = 0.0;
+  double _attendanceRate = 0.0;
+  int _attendanceDays = 0;
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
     super.initState();
-    _loadPoints();
+    _refreshData();
+  }
+
+  Future<void> _refreshData() async {
+    await _loadPoints();
+    await _loadTaskStats();
+    await _loadAttendanceStats();
   }
 
   // Firestore에서 포인트 불러오기
@@ -60,6 +71,97 @@ class _MainScreenState extends State<MainScreen> {
       setState(() {
         _points = 0;
       });
+    }
+  }
+
+  Future<void> _loadTaskStats() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      int totalTasks = 0;
+      int completedTasks = 0;
+
+      final coursesSnap = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('courses')
+          .get();
+
+
+      for (var courseDoc in coursesSnap.docs) {
+        final tasksSnap = await courseDoc.reference.collection('tasks').get();
+
+
+        for (var taskDoc in tasksSnap.docs) {
+          totalTasks++;
+          final isDone = taskDoc.data()['isDone'] as bool? ?? false;
+          if (isDone) completedTasks++;
+        }
+      }
+
+      double rate = 0.0;
+      if (totalTasks > 0) {
+        rate = completedTasks / totalTasks;
+      }
+
+      if (mounted) {
+        setState(() {
+          _taskProgress = rate;
+          _assignmentRate = rate;
+        });
+      }
+    } catch (e) {
+      print('할 일 통계 로드 오류: $e');
+    }
+  }
+
+  // 3. 출석 통계 (이번 주 월요일 기준)
+  Future<void> _loadAttendanceStats() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final now = DateTime.now();
+      final monday = now.subtract(Duration(days: now.weekday - 1));
+      final startOfWeek = DateTime(monday.year, monday.month, monday.day);
+
+      int checkedCount = 0;
+
+      final attendanceSnap = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('attendance')
+          .get();
+
+      for (var doc in attendanceSnap.docs) {
+        final dateKey = doc.id;
+        final parts = dateKey.split('-');
+        if (parts.length == 3) {
+          final date = DateTime(
+            int.parse(parts[0]),
+            int.parse(parts[1]),
+            int.parse(parts[2]),
+          );
+
+          if (date.isAtSameMomentAs(startOfWeek) || date.isAfter(startOfWeek)) {
+            final diff = date.difference(startOfWeek).inDays;
+            if (diff < 7) {
+              checkedCount++;
+            }
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _attendanceDays = checkedCount;
+          _attendanceRate = checkedCount / 7.0;
+          if (_attendanceRate > 1.0) _attendanceRate = 1.0;
+        });
+      }
+    } catch (e) {
+      print('출석 통계 로드 오류: $e');
     }
   }
 
@@ -113,6 +215,7 @@ class _MainScreenState extends State<MainScreen> {
                     title: '할 일 목록',
                     subtitle: '업무 관리 및 추적',
                     targetScreen: const TaskListScreen(),
+                    onReturned: _refreshData,
                   ),
                   _buildMenuButton(
                     context: context,
@@ -120,7 +223,7 @@ class _MainScreenState extends State<MainScreen> {
                     title: '출석 체크',
                     subtitle: '매일 포인트 획득',
                     targetScreen: const AttendanceScreen(),
-                    onReturned: _loadPoints, // 출석 후 포인트 새로고침
+                    onReturned: _refreshData, // 출석 후 포인트 새로고침
                   ),
                   _buildMenuButton(
                     context: context,
@@ -128,6 +231,7 @@ class _MainScreenState extends State<MainScreen> {
                     title: '포인트 상점',
                     subtitle: '포인트로 아이템 구매',
                     targetScreen: const StoreScreen(),
+                    onReturned: _refreshData,
                   ),
                 ],
               ),
@@ -241,11 +345,11 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          _buildStatBar(title: '계획 진행률', value: 0.0, displayText: '0% 완료'),
+          _buildStatBar(title: '계획 진행률', value:_taskProgress, displayText: '${(_taskProgress * 100).toInt()}% 완료'),
           const SizedBox(height: 16),
-          _buildStatBar(title: '출석률', value: 0.0, displayText: '0/7일 (0%)'),
+          _buildStatBar(title: '출석률', value: _attendanceRate, displayText: '$_attendanceDays/7일 (${(_attendanceRate * 100).toInt()}%)'),
           const SizedBox(height: 16),
-          _buildStatBar(title: '과제 완료율', value: 0.0, displayText: '0% 완료'),
+          _buildStatBar(title: '과제 완료율', value: _assignmentRate, displayText: '${(_assignmentRate * 100).toInt()}% 완료'),
         ],
       ),
     );
