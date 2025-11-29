@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'timetable_screen.dart';
 import 'task_list_screen.dart';
@@ -25,10 +26,28 @@ class _MainScreenState extends State<MainScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  bool _dailyQuoteEnabled = false;
+  final List<String> _quotes = const [
+    '오늘의 한 걸음이 내일의 나를 만든다.',
+    '완벽보다 완료가 더 중요하다.',
+    '작은 습관이 큰 변화를 만든다.',
+    '미루지 말고 지금 시작하자',
+  ];
+
   @override
   void initState() {
     super.initState();
     _refreshData();
+    _loadStoreFeatures();
+  }
+
+  Future<void> _loadStoreFeatures() async {
+    final prefs = await SharedPreferences.getInstance();
+    final owned = prefs.getStringList('ownedStoreItems') ?? [];
+
+    setState(() {
+      _dailyQuoteEnabled = owned.contains('feature_daily_quote');
+    });
   }
 
   Future<void> _refreshData() async {
@@ -88,10 +107,8 @@ class _MainScreenState extends State<MainScreen> {
           .collection('courses')
           .get();
 
-
       for (var courseDoc in coursesSnap.docs) {
         final tasksSnap = await courseDoc.reference.collection('tasks').get();
-
 
         for (var taskDoc in tasksSnap.docs) {
           totalTasks++;
@@ -165,6 +182,35 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  // 오늘의 문장 카드 위젯
+  Widget _buildDailyQuoteCard() {
+    if (!_dailyQuoteEnabled) return const SizedBox.shrink();
+
+    final shuffled = List<String>.from(_quotes)..shuffle();
+    final quote = shuffled.first;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3B3A70),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.format_quote, size: 20, color: Colors.white70),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              quote,
+              style: const TextStyle(fontSize: 13, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -194,6 +240,7 @@ class _MainScreenState extends State<MainScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _buildDailyQuoteCard(),
               GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
@@ -231,7 +278,11 @@ class _MainScreenState extends State<MainScreen> {
                     title: '포인트 상점',
                     subtitle: '포인트로 아이템 구매',
                     targetScreen: const StoreScreen(),
-                    onReturned: _refreshData,
+                    onReturned: () async {
+                      // 상점에서 오늘의 문장 아이템 새로 살 수도 있으니 다시 로드
+                      await _loadStoreFeatures();
+                      await _refreshData();
+                    },
                   ),
                 ],
               ),
@@ -270,7 +321,6 @@ class _MainScreenState extends State<MainScreen> {
         ),
         child: Stack(
           children: [
-            // 중앙 정렬
             Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -345,11 +395,24 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          _buildStatBar(title: '계획 진행률', value:_taskProgress, displayText: '${(_taskProgress * 100).toInt()}% 완료'),
+          _buildStatBar(
+            title: '계획 진행률',
+            value: _taskProgress,
+            displayText: '${(_taskProgress * 100).toInt()}% 완료',
+          ),
           const SizedBox(height: 16),
-          _buildStatBar(title: '출석률', value: _attendanceRate, displayText: '$_attendanceDays/7일 (${(_attendanceRate * 100).toInt()}%)'),
+          _buildStatBar(
+            title: '출석률',
+            value: _attendanceRate,
+            displayText:
+            '$_attendanceDays/7일 (${(_attendanceRate * 100).toInt()}%)',
+          ),
           const SizedBox(height: 16),
-          _buildStatBar(title: '과제 완료율', value: _assignmentRate, displayText: '${(_assignmentRate * 100).toInt()}% 완료'),
+          _buildStatBar(
+            title: '과제 완료율',
+            value: _assignmentRate,
+            displayText: '${(_assignmentRate * 100).toInt()}% 완료',
+          ),
         ],
       ),
     );
