@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// TODO: 경로 프로젝트에 맞게 수정
 import 'attendance_screen.dart';
 
 class StoreScreen extends StatefulWidget {
@@ -14,6 +13,7 @@ class StoreScreen extends StatefulWidget {
 enum StoreCategory {
   theme,
   appIcon,
+  feature, // 아이템 카테고리
 }
 
 class StoreItem {
@@ -50,6 +50,7 @@ class _StoreScreenState extends State<StoreScreen> {
   final Map<StoreCategory, String> _categoryNames = {
     StoreCategory.theme: '테마',
     StoreCategory.appIcon: '앱 아이콘',
+    StoreCategory.feature: '추가 기능',
   };
 
   // 출석 탭과 동일하게 쓸 색상들
@@ -169,6 +170,24 @@ class _StoreScreenState extends State<StoreScreen> {
         category: StoreCategory.appIcon,
         icon: Icons.circle_outlined,
       ),
+
+      // ===== 투두 기능 아이템 =====
+      StoreItem(
+        id: 'feature_confetti',
+        title: '완료 축하 효과',
+        description: '할 일을 완료할 때마다 축하 애니메이션 팝업이 나타납니다.',
+        cost: 30,
+        category: StoreCategory.feature,
+        icon: Icons.celebration,
+      ),
+      StoreItem(
+        id: 'feature_daily_quote',
+        title: '오늘의 문장 위젯',
+        description: '투두 리스트 상단에 동기부여 문장을 띄워줍니다.',
+        cost: 20,
+        category: StoreCategory.feature,
+        icon: Icons.format_quote,
+      ),
     ];
   }
 
@@ -244,6 +263,7 @@ class _StoreScreenState extends State<StoreScreen> {
       } else if (item.category == StoreCategory.appIcon) {
         _selectedIconItemId = item.id;
       }
+      // feature 타입은 소유만 해도 바로 활성화(별도 적용 과정 x)
     });
 
     await _saveData();
@@ -261,6 +281,10 @@ class _StoreScreenState extends State<StoreScreen> {
       return;
     }
 
+    if (item.category == StoreCategory.feature) {
+      return;
+    }
+
     setState(() {
       if (item.category == StoreCategory.theme) {
         _selectedThemeItemId = item.id;
@@ -271,8 +295,7 @@ class _StoreScreenState extends State<StoreScreen> {
 
     await _saveData();
 
-    final what =
-    item.category == StoreCategory.theme ? '테마' : '앱 아이콘';
+    final what = item.category == StoreCategory.theme ? '테마' : '앱 아이콘';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('\'${item.title}\' $what를 적용했어요.')),
     );
@@ -477,6 +500,20 @@ class _StoreScreenState extends State<StoreScreen> {
       isApplied = (_selectedIconItemId == item.id);
     }
 
+    Widget trailing;
+
+    if (item.category == StoreCategory.feature) {
+      trailing = item.isOwned
+          ? _buildOwnedFeatureTrailing(item)
+          : _buildBuyTrailing(canBuy, item);
+    } else {
+      trailing = item.cost == 0
+          ? _buildOwnedFreeTrailing(isApplied, item)
+          : (item.isOwned
+          ? _buildOwnedPaidTrailing(isApplied, item)
+          : _buildBuyTrailing(canBuy, item));
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
@@ -516,11 +553,7 @@ class _StoreScreenState extends State<StoreScreen> {
             ),
           ),
         ),
-        trailing: item.cost == 0
-            ? _buildOwnedFreeTrailing(isApplied, item)
-            : (item.isOwned
-            ? _buildOwnedPaidTrailing(isApplied, item)
-            : _buildBuyTrailing(canBuy, item)),
+        trailing: trailing,
       ),
     );
   }
@@ -538,14 +571,13 @@ class _StoreScreenState extends State<StoreScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 4), // 🔽 6 → 4
+        const SizedBox(height: 4),
         SizedBox(
-          height: 26, // 🔽 28 → 26
+          height: 26,
           child: ElevatedButton(
             onPressed: canBuy ? () => _buyItem(item) : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor:
-              canBuy ? _accentColor : Colors.grey.shade500,
+              backgroundColor: canBuy ? _accentColor : Colors.grey.shade500,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 10),
               shape: RoundedRectangleBorder(
@@ -669,6 +701,29 @@ class _StoreScreenState extends State<StoreScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildOwnedFeatureTrailing(StoreItem item) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: const [
+        Text(
+          '사용 중',
+          style: TextStyle(
+            fontSize: 11,
+            color: _goldColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 4),
+        Icon(
+          Icons.check_circle,
+          color: _goldColor,
+          size: 18,
+        ),
+      ],
     );
   }
 }
