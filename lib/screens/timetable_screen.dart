@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:planit/screens/add_course_screen.dart';
 
 class TimetableScreen extends StatefulWidget {
@@ -16,11 +17,16 @@ class _TimetableScreenState extends State<TimetableScreen>
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
-  List<Map<String, dynamic>> _courses = []; // 각 강의 + docId 저장
+  List<Map<String, dynamic>> _courses = [];
   bool _isLoading = true;
 
   late final TabController _tabController;
   final List<String> _days = ['월', '화', '수', '목', '금'];
+
+  final Color _primaryColor = const Color(0xFF6768F0);
+  final Color _backgroundTop = const Color(0xFF191C3D);
+  final Color _backgroundBottom = const Color(0xFF101226);
+  final Color _cardBackground = const Color(0xFF262744);
 
   @override
   void initState() {
@@ -57,7 +63,7 @@ class _TimetableScreenState extends State<TimetableScreen>
       setState(() {
         _courses = snapshot.docs.map((doc) {
           final data = doc.data();
-          data['id'] = doc.id; // 삭제/수정용 docId 저장
+          data['id'] = doc.id;
           return data;
         }).toList();
         _isLoading = false;
@@ -114,17 +120,41 @@ class _TimetableScreenState extends State<TimetableScreen>
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('강의 삭제'),
-          content: Text('‘$title’ 강의를 정말로 삭제하시겠습니까?'),
+          backgroundColor: _cardBackground,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            '강의 삭제',
+            style: GoogleFonts.notoSansKr(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(
+            '‘$title’ 강의를 정말로 삭제하시겠습니까?',
+            style: GoogleFonts.notoSansKr(
+              color: Colors.white70,
+              fontSize: 14,
+            ),
+          ),
           actions: [
             TextButton(
-              child: const Text('취소'),
+              child: Text(
+                '취소',
+                style: GoogleFonts.notoSansKr(
+                  color: Colors.white70,
+                ),
+              ),
               onPressed: () => Navigator.pop(context, false),
             ),
             TextButton(
-              child: const Text(
+              child: Text(
                 '삭제',
-                style: TextStyle(color: Colors.red),
+                style: GoogleFonts.notoSansKr(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               onPressed: () => Navigator.pop(context, true),
             ),
@@ -177,68 +207,151 @@ class _TimetableScreenState extends State<TimetableScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('시간표 관리'),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [_backgroundTop, _backgroundBottom],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // 강의 추가 버튼
-            ElevatedButton(
-              onPressed: _navigateToAddCourse,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add),
-                  SizedBox(width: 8),
-                  Text(
-                    '새로운 강의를 추가하세요',
-                    style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Text(
+            '시간표 관리',
+            style: GoogleFonts.notoSansKr(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                // 강의 추가 카드 버튼
+                GestureDetector(
+                  onTap: _navigateToAddCourse,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _cardBackground,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: _primaryColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '새로운 강의를 추가하세요',
+                                style: GoogleFonts.notoSansKr(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '과목, 강의실, 요일, 시간을 자유롭게 편집할 수 있어요.',
+                                style: GoogleFonts.notoSansKr(
+                                  fontSize: 12,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 요일 탭
-            TabBar(
-              controller: _tabController,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
-              indicatorColor: const Color(0xFF6768F0),
-              tabs: _days.map((d) => Tab(text: d)).toList(),
-            ),
-            const SizedBox(height: 8),
-
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _courses.isEmpty
-                  ? const Center(
-                child: Text(
-                  '추가된 강의가 없습니다.\n위의 버튼을 눌러 강의를 추가해 주세요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 16, color: Colors.white54),
                 ),
-              )
-                  : TabBarView(
-                controller: _tabController,
-                children: _days
-                    .map((day) => _buildTimetableForDay(day))
-                    .toList(),
-              ),
+                const SizedBox(height: 16),
+
+                // 요일 탭
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF24253F),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    labelStyle: GoogleFonts.notoSansKr(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                    unselectedLabelStyle: GoogleFonts.notoSansKr(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.white54,
+                    indicator: BoxDecoration(
+                      color: _primaryColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    tabs: _days.map((d) => Tab(text: d)).toList(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _courses.isEmpty
+                      ? Center(
+                    child: Text(
+                      '추가된 강의가 없습니다.\n위의 버튼을 눌러 강의를 추가해 주세요.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.notoSansKr(
+                        fontSize: 14,
+                        color: Colors.white60,
+                      ),
+                    ),
+                  )
+                      : TabBarView(
+                    controller: _tabController,
+                    children: _days
+                        .map((day) => _buildTimetableForDay(day))
+                        .toList(),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  /// 시간표 형식으로 보여주기
   Widget _buildTimetableForDay(String day) {
     final dayCourses = _courses.where((c) => c['day'] == day).toList();
 
@@ -246,15 +359,17 @@ class _TimetableScreenState extends State<TimetableScreen>
       return Center(
         child: Text(
           '$day요일에 등록된 강의가 없습니다.',
-          style: const TextStyle(fontSize: 16, color: Colors.white54),
+          style: GoogleFonts.notoSansKr(
+            fontSize: 14,
+            color: Colors.white60,
+          ),
         ),
       );
     }
 
-    // 세로축: 9시 ~ 23시 (밤 11시)
     const int startHour = 9;
     const int endHour = 23;
-    const double hourHeight = 64.0; // 1시간당 높이(px)
+    const double hourHeight = 64.0;
 
     final hours = List<int>.generate(
       endHour - startHour + 1,
@@ -263,22 +378,14 @@ class _TimetableScreenState extends State<TimetableScreen>
 
     final double totalHeight = hours.length * hourHeight;
 
-    TimeOfDay _parseTime(String str) {
-      final parts = str.split(':');
-      final hour = int.parse(parts[0]);
-      final minute = int.parse(parts[1]);
-      return TimeOfDay(hour: hour, minute: minute);
-    }
-
     return SingleChildScrollView(
       child: SizedBox(
         height: totalHeight,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 왼쪽 시간 라벨 컬럼
             SizedBox(
-              width: 40,
+              width: 44,
               child: Column(
                 children: hours.map((h) {
                   return SizedBox(
@@ -287,9 +394,9 @@ class _TimetableScreenState extends State<TimetableScreen>
                       alignment: Alignment.topCenter,
                       child: Text(
                         '$h시',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.white70,
+                        style: GoogleFonts.notoSansKr(
+                          fontSize: 11,
+                          color: Colors.white54,
                         ),
                       ),
                     ),
@@ -300,11 +407,9 @@ class _TimetableScreenState extends State<TimetableScreen>
 
             const SizedBox(width: 8),
 
-            // 오른쪽 실제 시간표 영역 (Stack 위에 시간선 + 강의 블록)
             Expanded(
               child: Stack(
                 children: [
-                  // 시간별 가로선
                   ...hours.map((h) {
                     final double top =
                         (h - startHour).toDouble() * hourHeight;
@@ -319,7 +424,6 @@ class _TimetableScreenState extends State<TimetableScreen>
                     );
                   }).toList(),
 
-                  // 강의 블록들
                   ...dayCourses.map((course) {
                     final startStr =
                         (course['startTime'] as String?) ?? '09:00';
@@ -331,9 +435,9 @@ class _TimetableScreenState extends State<TimetableScreen>
 
                     double startInHour =
                         start.hour + start.minute / 60.0;
-                    double endInHour = end.hour + end.minute / 60.0;
+                    double endInHour =
+                        end.hour + end.minute / 60.0;
 
-                    // 표시 범위(9~23시) 밖이면 잘라서 보이도록 클램프
                     startInHour = startInHour.clamp(
                         startHour.toDouble(), endHour.toDouble());
                     endInHour = endInHour.clamp(
@@ -344,29 +448,36 @@ class _TimetableScreenState extends State<TimetableScreen>
                     final double height =
                         (endInHour - startInHour) * hourHeight;
 
-                    // 높이가 0이하인 경우 표시하지 않음
                     if (height <= 0) return const SizedBox.shrink();
 
                     return Positioned(
                       top: top,
                       left: 0,
                       right: 0,
-                      height: height < 40 ? 40 : height,
+                      height: height < 44 ? 44 : height,
                       child: GestureDetector(
                         onTap: () => _navigateToEditCourse(course),
                         child: Container(
                           margin:
                           const EdgeInsets.symmetric(vertical: 2),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                              horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6768F0),
+                            color: _primaryColor,
                             borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                Colors.black.withOpacity(0.25),
+                                blurRadius: 10,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
                           ),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                            crossAxisAlignment:
+                            CrossAxisAlignment.center,
                             children: [
-                              // 강의 정보 한 줄로 가로 표시
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment:
@@ -379,16 +490,16 @@ class _TimetableScreenState extends State<TimetableScreen>
                                           '${course['room'] ?? '-'}',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                      style: GoogleFonts.notoSansKr(
                                         fontSize: 13,
-                                        fontWeight: FontWeight.bold,
+                                        fontWeight: FontWeight.w700,
                                         color: Colors.white,
                                       ),
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
                                       '$startStr ~ $endStr',
-                                      style: const TextStyle(
+                                      style: GoogleFonts.notoSansKr(
                                         fontSize: 11,
                                         color: Colors.white70,
                                       ),
@@ -422,7 +533,7 @@ class _TimetableScreenState extends State<TimetableScreen>
     );
   }
 
-  /// 기존 카드 리스트 뷰가 필요하면 유지해서 다른 화면에서 재활용할 수 있음
+  // 필요하면 다른 화면에서 재활용 가능
   Widget _buildCourseCard(Map<String, dynamic> course, int index) {
     return InkWell(
       onTap: () => _navigateToEditCourse(course),
@@ -430,59 +541,58 @@ class _TimetableScreenState extends State<TimetableScreen>
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color.fromARGB(255, 59, 58, 112),
+          color: _cardBackground,
           borderRadius: BorderRadius.circular(15),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // 강의 정보
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     course['title'] ?? '강의명 없음',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                    style: GoogleFonts.notoSansKr(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
                     '${course['prof'] ?? '-'} | ${course['room'] ?? '-'}',
-                    style: const TextStyle(
-                        fontSize: 14, color: Colors.white70),
+                    style: GoogleFonts.notoSansKr(
+                      fontSize: 13,
+                      color: Colors.white70,
+                    ),
                   ),
                 ],
               ),
             ),
-
-            // 요일 / 시간 + 삭제 아이콘
             Column(
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6768F0),
+                    color: _primaryColor,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Column(
                     children: [
                       Text(
                         course['day'] ?? '-',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
+                        style: GoogleFonts.notoSansKr(
+                          fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '${course['startTime'] ?? ''}~${course['endTime'] ?? ''}',
-                        style: const TextStyle(
-                          fontSize: 12,
+                        style: GoogleFonts.notoSansKr(
+                          fontSize: 11,
                           color: Colors.white,
                         ),
                       ),
@@ -491,8 +601,10 @@ class _TimetableScreenState extends State<TimetableScreen>
                 ),
                 const SizedBox(height: 8),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      color: Colors.white70),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.white70,
+                  ),
                   onPressed: () => _confirmDelete(index),
                 ),
               ],

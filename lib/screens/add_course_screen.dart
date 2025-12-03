@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AddCourseScreen extends StatefulWidget {
   final Map<String, dynamic>? course; // 수정 시 기존 데이터
@@ -36,11 +37,17 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
 
   bool _isSaving = false;
 
+  // 메인 화면과 맞춘 컬러
+  final Color _primaryColor = const Color(0xFF6768F0);
+  final Color _backgroundTop = const Color(0xFF191C3D);
+  final Color _backgroundBottom = const Color(0xFF101226);
+  final Color _cardBackground = const Color(0xFF262744);
+  final Color _fieldBackground = const Color(0xFF262744);
+
   @override
   void initState() {
     super.initState();
 
-    // 수정 모드라면 초기값 세팅
     if (widget.isEdit) {
       final c = widget.course!;
       _titleController.text = (c['title'] ?? '') as String;
@@ -85,26 +92,40 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
     await showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF2D2C59),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (BuildContext builder) {
         return SizedBox(
-          height: 250,
+          height: 260,
           child: Column(
             children: [
               Container(
                 padding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: const Color(0xFF25254A),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF25254A),
+                  borderRadius:
+                  BorderRadius.vertical(top: Radius.circular(20)),
+                ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    Text(
+                      isStart ? '시작 시간 선택' : '종료 시간 선택',
+                      style: GoogleFonts.notoSansKr(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text(
+                      child: Text(
                         '완료',
-                        style: TextStyle(
+                        style: GoogleFonts.notoSansKr(
                           color: Colors.white,
                           fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -191,10 +212,8 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
           .collection('courses');
 
       if (isEdit) {
-        // 수정
         await ref.doc(widget.courseId!).update(data);
       } else {
-        // 신규 추가
         await ref.add(data);
       }
 
@@ -202,10 +221,11 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(
-                isEdit ? '강의가 수정되었습니다.' : '강의가 성공적으로 추가되었습니다.')),
+          content:
+          Text(isEdit ? '강의가 수정되었습니다.' : '강의가 성공적으로 추가되었습니다.'),
+        ),
       );
-      Navigator.pop(context, true); // true => 시간표 화면에서 새로고침
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -220,119 +240,174 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
   Widget build(BuildContext context) {
     final isEdit = widget.isEdit;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(isEdit ? '강의 수정' : '강의 추가'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-        leading: Container(),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [_backgroundTop, _backgroundBottom],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _inputField(
-                label: '강의명',
-                hint: '강의명을 입력하세요',
-                controller: _titleController,
-              ),
-              const SizedBox(height: 24),
-
-              _inputField(
-                label: '강의실',
-                hint: '강의실 번호를 입력하세요',
-                controller: _roomController,
-              ),
-              const SizedBox(height: 24),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: _inputField(
-                      label: '담당 교수',
-                      hint: '교수명',
-                      controller: _profController,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _dropdownField(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: _timeButton(
-                      label: '시작 시간',
-                      time: _startTime,
-                      isStart: true,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _timeButton(
-                      label: '종료 시간',
-                      time: _endTime,
-                      isStart: false,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 48),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                        const Color.fromARGB(255, 59, 58, 112),
-                        elevation: 0,
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        '취소하기',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          title: Text(
+            isEdit ? '강의 수정' : '강의 추가',
+            style: GoogleFonts.notoSansKr(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          centerTitle: false,
+          leadingWidth: 0,
+          leading: const SizedBox.shrink(),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: SingleChildScrollView(
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: _cardBackground,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      isEdit ? '강의 정보를 수정하세요' : '새 강의를 등록해볼까요?',
+                      style: GoogleFonts.notoSansKr(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isSaving ? null : _saveClass,
-                      child: _isSaving
-                          ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                          : Text(
-                        isEdit ? '강의 저장' : '강의 추가',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    const SizedBox(height: 20),
+
+                    _inputField(
+                      label: '강의명',
+                      hint: '예) 고급모바일프로그래밍',
+                      controller: _titleController,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+
+                    _inputField(
+                      label: '강의실',
+                      hint: '예) 공학관 302호',
+                      controller: _roomController,
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _inputField(
+                            label: '담당 교수',
+                            hint: '예) 홍길동',
+                            controller: _profController,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _dropdownField(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _timeButton(
+                            label: '시작 시간',
+                            time: _startTime,
+                            isStart: true,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _timeButton(
+                            label: '종료 시간',
+                            time: _endTime,
+                            isStart: false,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 28),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(
+                                color: Colors.white24,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 14),
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                            child: Text(
+                              '취소하기',
+                              style: GoogleFonts.notoSansKr(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _primaryColor,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 14),
+                            ),
+                            onPressed: _isSaving ? null : _saveClass,
+                            child: _isSaving
+                                ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                                : Text(
+                              isEdit ? '강의 저장' : '강의 추가',
+                              style: GoogleFonts.notoSansKr(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -349,17 +424,39 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 16,
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+          style: GoogleFonts.notoSansKr(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
           ),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(hintText: hint),
+          style: GoogleFonts.notoSansKr(
+            color: Colors.white,
+            fontSize: 14,
+          ),
+          cursorColor: Colors.white70,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: GoogleFonts.notoSansKr(
+              color: Colors.white38,
+              fontSize: 13,
+            ),
+            filled: true,
+            fillColor: _fieldBackground,
+            contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: Colors.white10),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: Colors.white30),
+            ),
+          ),
         ),
       ],
     );
@@ -369,37 +466,44 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '요일',
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+          style: GoogleFonts.notoSansKr(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
           ),
         ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: const Color.fromARGB(255, 59, 58, 112),
-            borderRadius: BorderRadius.circular(15),
+            color: _fieldBackground,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white10),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: _selectedDay,
-              hint: const Text(
+              hint: Text(
                 '선택',
-                style: TextStyle(color: Colors.white54),
+                style: GoogleFonts.notoSansKr(
+                  color: Colors.white38,
+                  fontSize: 13,
+                ),
               ),
               dropdownColor: const Color(0xFF2D2C59),
-              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
               isExpanded: true,
               items: _daysList.map((day) {
                 return DropdownMenuItem(
                   value: day,
                   child: Text(
                     day,
-                    style: const TextStyle(color: Colors.white),
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
                   ),
                 );
               }).toList(),
@@ -421,10 +525,10 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 16,
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+          style: GoogleFonts.notoSansKr(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.white70,
           ),
         ),
         const SizedBox(height: 8),
@@ -432,22 +536,25 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
           onTap: () => _pickTime(isStart),
           child: Container(
             padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             decoration: BoxDecoration(
-              color: const Color.fromARGB(255, 59, 58, 112),
-              borderRadius: BorderRadius.circular(15),
+              color: _fieldBackground,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white10),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   time != null ? time.format(context) : '선택',
-                  style: TextStyle(
-                    color: time != null ? Colors.white : Colors.white54,
+                  style: GoogleFonts.notoSansKr(
+                    color:
+                    time != null ? Colors.white : Colors.white38,
+                    fontSize: 14,
                   ),
                 ),
                 const Icon(Icons.access_time,
-                    color: Colors.white70, size: 20),
+                    color: Colors.white70, size: 18),
               ],
             ),
           ),
