@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'timetable_screen.dart';
 import 'task_list_screen.dart';
 import 'attendance_screen.dart';
 import 'store_screen.dart';
+import 'login_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -15,6 +20,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _points = 0;
 
   double _taskProgress = 0.0;
@@ -25,10 +31,36 @@ class _MainScreenState extends State<MainScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  bool _dailyQuoteEnabled = false;
+  final List<String> _quotes = const [
+    '오늘의 한 걸음이 내일의 나를 만든다.',
+    '완벽보다 완료가 더 중요하다.',
+    '작은 습관이 큰 변화를 만든다.',
+    '미루지 말고 지금 시작하자',
+  ];
+
+  // 공통 컬러/테마
+  final Color _primaryColor = const Color(0xFF6768F0);
+  final Color _backgroundTop = const Color(0xFF191C3D);
+  final Color _backgroundBottom = const Color(0xFF101226);
+  final Color _cardBackground = const Color(0xFF262744);  // 어두운 카드
+  final Color _textPrimary = Colors.white;                // 카드 안 메인 텍스트
+  final Color _textSecondary = Colors.white70;            // 카드 안 서브 텍스트
+
   @override
   void initState() {
     super.initState();
     _refreshData();
+    _loadStoreFeatures();
+  }
+
+  Future<void> _loadStoreFeatures() async {
+    final prefs = await SharedPreferences.getInstance();
+    final owned = prefs.getStringList('ownedStoreItems') ?? [];
+
+    setState(() {
+      _dailyQuoteEnabled = owned.contains('feature_daily_quote');
+    });
   }
 
   Future<void> _refreshData() async {
@@ -37,11 +69,9 @@ class _MainScreenState extends State<MainScreen> {
     await _loadAttendanceStats();
   }
 
-  // Firestore에서 포인트 불러오기
   Future<void> _loadPoints() async {
     final user = _auth.currentUser;
 
-    // 로그인 안 되어 있으면 0P로
     if (user == null) {
       setState(() {
         _points = 0;
@@ -88,10 +118,8 @@ class _MainScreenState extends State<MainScreen> {
           .collection('courses')
           .get();
 
-
       for (var courseDoc in coursesSnap.docs) {
         final tasksSnap = await courseDoc.reference.collection('tasks').get();
-
 
         for (var taskDoc in tasksSnap.docs) {
           totalTasks++;
@@ -116,7 +144,6 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // 3. 출석 통계 (이번 주 월요일 기준)
   Future<void> _loadAttendanceStats() async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -165,79 +192,356 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('PlanIT'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Chip(
-              backgroundColor: Colors.black.withOpacity(0.2),
-              label: Text(
-                '$_points P',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+  void _showExitDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: _cardBackground,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.close, color: Colors.grey),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Text(
+                  '앱을 종료하시겠어요?',
+                  style: GoogleFonts.notoSansKr(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '로그아웃 후 종료하거나,\n그냥 앱만 종료할 수 있어요.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.notoSansKr(
+                    fontSize: 13,
+                    color: _textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await _auth.signOut();
+                          if (mounted) {
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const LoginScreen(),
+                              ),
+                                  (route) => false,
+                            );
+                          }
+                        },
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: _primaryColor.withOpacity(0.4)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          '로그아웃',
+                          style: GoogleFonts.notoSansKr(
+                            color: _primaryColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          try {
+                            SystemNavigator.pop();
+                          } catch (e) {}
+                          exit(0);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _primaryColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          '그냥 종료',
+                          style: GoogleFonts.notoSansKr(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.menu)),
+        );
+      },
+    );
+  }
+
+  Widget _buildDailyQuoteCard() {
+    if (!_dailyQuoteEnabled) return const SizedBox.shrink();
+
+    final shuffled = List<String>.from(_quotes)..shuffle();
+    final quote = shuffled.first;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: _cardBackground,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
         ],
-        automaticallyImplyLeading: false,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 0.9,
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: _primaryColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: Text('✨', style: TextStyle(fontSize: 20)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '오늘의 문장',
+                  style: GoogleFonts.notoSansKr(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  quote,
+                  style: GoogleFonts.notoSansKr(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: _textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [_backgroundTop, _backgroundBottom],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          systemOverlayStyle: SystemUiOverlayStyle.light,
+          title: Text(
+            'PlanIT',
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+          centerTitle: false,
+          actions: [
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.18),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildMenuButton(
-                    context: context,
-                    icon: Icons.calendar_today,
-                    title: '시간표',
-                    subtitle: '강의 일정 관리',
-                    targetScreen: const TimetableScreen(),
-                  ),
-                  _buildMenuButton(
-                    context: context,
-                    icon: Icons.checklist,
-                    title: '할 일 목록',
-                    subtitle: '업무 관리 및 추적',
-                    targetScreen: const TaskListScreen(),
-                    onReturned: _refreshData,
-                  ),
-                  _buildMenuButton(
-                    context: context,
-                    icon: Icons.check_circle_outline,
-                    title: '출석 체크',
-                    subtitle: '매일 포인트 획득',
-                    targetScreen: const AttendanceScreen(),
-                    onReturned: _refreshData, // 출석 후 포인트 새로고침
-                  ),
-                  _buildMenuButton(
-                    context: context,
-                    icon: Icons.storefront,
-                    title: '포인트 상점',
-                    subtitle: '포인트로 아이템 구매',
-                    targetScreen: const StoreScreen(),
-                    onReturned: _refreshData,
+                  const Icon(Icons.stars, size: 18, color: Colors.amber),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$_points P',
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              _buildStatsSection(),
-            ],
+            ),
+            IconButton(
+              onPressed: () {
+                _scaffoldKey.currentState?.openEndDrawer();
+              },
+              icon: const Icon(Icons.menu_rounded),
+            ),
+          ],
+          automaticallyImplyLeading: false,
+        ),
+        endDrawer: Drawer(
+          backgroundColor: const Color(0xFF242548),
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListTile(
+                  title: Text(
+                    '설정 & 기타',
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'PlanIT을 더 편하게 사용해보세요.',
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Divider(color: Colors.white24),
+                const Spacer(),
+                const Divider(color: Colors.white24),
+                ListTile(
+                  leading: const Icon(Icons.exit_to_app, color: Colors.white70),
+                  title: Text(
+                    '종료하기',
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showExitDialog();
+                  },
+                ),
+                const SizedBox(height: 28),
+              ],
+            ),
+          ),
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '오늘 할 일을\nPlanIT에서 정리해볼까요?',
+                    style: GoogleFonts.notoSansKr(
+                      fontSize: 20,
+                      height: 1.3,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  _buildDailyQuoteCard(),
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 14,
+                    crossAxisSpacing: 14,
+                    childAspectRatio: 0.9,
+                    children: [
+                      _buildMenuButton(
+                        context: context,
+                        icon: Icons.calendar_today_rounded,
+                        title: '시간표',
+                        subtitle: '강의 일정 한눈에',
+                        targetScreen: const TimetableScreen(),
+                      ),
+                      _buildMenuButton(
+                        context: context,
+                        icon: Icons.checklist_rounded,
+                        title: '할 일 목록',
+                        subtitle: '해야 할 일 정리',
+                        targetScreen: const TaskListScreen(),
+                        onReturned: _refreshData,
+                      ),
+                      _buildMenuButton(
+                        context: context,
+                        icon: Icons.check_circle_outline_rounded,
+                        title: '출석 체크',
+                        subtitle: '출석하면 포인트!',
+                        targetScreen: const AttendanceScreen(),
+                        onReturned: _refreshData,
+                      ),
+                      _buildMenuButton(
+                        context: context,
+                        icon: Icons.storefront_rounded,
+                        title: '포인트 상점',
+                        subtitle: '아이템 모으기',
+                        targetScreen: const StoreScreen(),
+                        onReturned: () async {
+                          await _loadStoreFeatures();
+                          await _refreshData();
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _buildStatsSection(),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -263,41 +567,67 @@ class _MainScreenState extends State<MainScreen> {
         });
       },
       child: Container(
-        padding: const EdgeInsets.all(16.0),
         decoration: BoxDecoration(
-          color: const Color(0xFF6768F0).withOpacity(0.2),
-          borderRadius: BorderRadius.circular(20.0),
+          color: _cardBackground,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+          ],
         ),
+        padding: const EdgeInsets.all(16.0),
         child: Stack(
           children: [
-            // 중앙 정렬
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 40, color: Colors.white),
-                  const SizedBox(height: 16),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+            Positioned(
+              right: -10,
+              top: -10,
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      _primaryColor.withOpacity(0.16),
+                      Colors.pinkAccent.withOpacity(0.12),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
-                  ),
-                ],
+                ),
               ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: _primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, size: 24, color: _primaryColor),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  title,
+                  style: GoogleFonts.notoSansKr(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.notoSansKr(
+                    fontSize: 13,
+                    color: _textSecondary,
+                  ),
+                ),
+              ],
             ),
             if (isNew)
               Positioned(
@@ -305,17 +635,17 @@ class _MainScreenState extends State<MainScreen> {
                 right: 0,
                 child: Container(
                   padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.yellow[700],
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.pinkAccent,
+                    borderRadius: BorderRadius.circular(999),
                   ),
-                  child: const Text(
+                  child: Text(
                     'NEW',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                    style: GoogleFonts.notoSansKr(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 10,
                     ),
                   ),
                 ),
@@ -328,28 +658,56 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildStatsSection() {
     return Container(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.all(18.0),
       decoration: BoxDecoration(
-        color: const Color(0xFF6768F0).withOpacity(0.2),
-        borderRadius: BorderRadius.circular(20.0),
+        color: _cardBackground,
+        borderRadius: BorderRadius.circular(22.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '이번주 학습 통계',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+          Text(
+            '이번 주 학습 통계',
+            style: GoogleFonts.notoSansKr(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: _textPrimary,
             ),
           ),
-          const SizedBox(height: 20),
-          _buildStatBar(title: '계획 진행률', value:_taskProgress, displayText: '${(_taskProgress * 100).toInt()}% 완료'),
+          const SizedBox(height: 4),
+          Text(
+            '한 주의 패턴을 한눈에 확인해보세요.',
+            style: GoogleFonts.notoSansKr(
+              fontSize: 12,
+              color: _textSecondary,
+            ),
+          ),
+          const SizedBox(height: 18),
+          _buildStatBar(
+            title: '계획 진행률',
+            value: _taskProgress,
+            displayText: '${(_taskProgress * 100).toInt()}% 완료',
+          ),
           const SizedBox(height: 16),
-          _buildStatBar(title: '출석률', value: _attendanceRate, displayText: '$_attendanceDays/7일 (${(_attendanceRate * 100).toInt()}%)'),
+          _buildStatBar(
+            title: '출석률',
+            value: _attendanceRate,
+            displayText:
+            '$_attendanceDays/7일 (${(_attendanceRate * 100).toInt()}%)',
+          ),
           const SizedBox(height: 16),
-          _buildStatBar(title: '과제 완료율', value: _assignmentRate, displayText: '${(_assignmentRate * 100).toInt()}% 완료'),
+          _buildStatBar(
+            title: '과제 완료율',
+            value: _assignmentRate,
+            displayText: '${(_assignmentRate * 100).toInt()}% 완료',
+          ),
         ],
       ),
     );
@@ -360,6 +718,8 @@ class _MainScreenState extends State<MainScreen> {
     required double value,
     required String displayText,
   }) {
+    final safeValue = value.clamp(0.0, 1.0);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -368,26 +728,29 @@ class _MainScreenState extends State<MainScreen> {
           children: [
             Text(
               title,
-              style: const TextStyle(fontSize: 16, color: Colors.white70),
+              style: GoogleFonts.notoSansKr(
+                fontSize: 14,
+                color: _textSecondary,
+              ),
             ),
             Text(
               displayText,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+              style: GoogleFonts.notoSansKr(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
         ClipRRect(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(999),
           child: LinearProgressIndicator(
-            value: value,
-            minHeight: 10,
-            backgroundColor: Colors.black.withOpacity(0.3),
-            color: const Color(0xFF6768F0),
+            value: safeValue,
+            minHeight: 8,
+            backgroundColor: const Color(0xFFF0F1F5),
+            color: _primaryColor,
           ),
         ),
       ],
