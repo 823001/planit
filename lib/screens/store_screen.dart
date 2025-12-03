@@ -13,7 +13,7 @@ class StoreScreen extends StatefulWidget {
 enum StoreCategory {
   theme,
   appIcon,
-  feature, // 아이템 카테고리
+  feature,
 }
 
 class StoreItem {
@@ -27,7 +27,7 @@ class StoreItem {
     this.isOwned = false,
   });
 
-  final String id; // SharedPreferences에 저장할 때 사용할 고유 ID
+  final String id;
   final String title;
   final String description;
   final int cost;
@@ -41,7 +41,6 @@ class _StoreScreenState extends State<StoreScreen> {
   int _points = 0;
   Set<String> _ownedItemIds = {};
 
-  // 선택된 테마/아이콘 (아이템 id 기준)
   String _selectedThemeItemId = 'theme_default';
   String _selectedIconItemId = 'icon_default';
 
@@ -53,25 +52,25 @@ class _StoreScreenState extends State<StoreScreen> {
     StoreCategory.feature: '추가 기능',
   };
 
-  // 출석 탭과 동일하게 쓸 색상들
-  static const Color _cardBaseColor = Color(0xFF25254A);
+  // 공통 팔레트 (메인/출석과 맞춤)
+  static const Color _bgColor = Color(0xFF1B1C3A);
+  static const Color _cardBaseColor = Color(0xFF262744);
   static const Color _accentColor = Color(0xFF6768F0);
-  static const Color _goldColor = Color(0xFFB5986D);
+  static const Color _goldColor = Color(0xFFE9C46A);
 
   bool get _isDefaultTheme => _selectedThemeItemId == 'theme_default';
   bool get _isLightTheme => _selectedThemeItemId == 'theme_light';
   bool get _isDarkTheme => _selectedThemeItemId == 'theme_dark';
 
-  // ======= 색상 계산 (기본 모드는 출석 체크 스타일 그대로) =======
   Color get _scaffoldBackground {
     if (_isLightTheme) return Colors.white;
     if (_isDarkTheme) return Colors.black;
-    return Theme.of(context).scaffoldBackgroundColor;
+    return _bgColor;
   }
 
   Color get _appBarBackground {
     if (_isLightTheme) return Colors.white;
-    return _cardBaseColor;
+    return const Color(0xFF1F203A);
   }
 
   Color get _appBarForeground {
@@ -96,16 +95,16 @@ class _StoreScreenState extends State<StoreScreen> {
 
   Color get _chipBackground {
     if (_isLightTheme) {
-      return Colors.black.withOpacity(0.06);
+      return Colors.black.withOpacity(0.04);
     }
-    return Colors.black.withOpacity(0.25);
+    return Colors.black.withOpacity(0.18);
   }
 
   Color get _iconBgColor {
     if (_isLightTheme) {
-      return Colors.black.withOpacity(0.05);
+      return Colors.black.withOpacity(0.04);
     }
-    return Colors.white.withOpacity(0.1);
+    return Colors.white.withOpacity(0.08);
   }
 
   @override
@@ -117,11 +116,11 @@ class _StoreScreenState extends State<StoreScreen> {
 
   void _initItems() {
     _items = [
-      // ===== 테마 =====
+      // 테마
       StoreItem(
         id: 'theme_default',
         title: '기본 테마',
-        description: '출석 체크 탭에서 쓰는 진한 남색 카드 스타일의 기본 테마입니다.',
+        description: '짙은 남색 배경과 카드 스타일의 PlanIT 기본 테마입니다.',
         cost: 0,
         category: StoreCategory.theme,
         icon: Icons.style,
@@ -138,17 +137,17 @@ class _StoreScreenState extends State<StoreScreen> {
       StoreItem(
         id: 'theme_dark',
         title: '다크 모드',
-        description: '전체 배경을 어둡게 해서 밤에도 눈에 부담을 줄여주는 다크 모드입니다.',
+        description: '완전히 어두운 배경으로 눈의 피로를 줄여주는 다크 모드입니다.',
         cost: 50,
         category: StoreCategory.theme,
         icon: Icons.dark_mode,
       ),
 
-      // ===== 앱 아이콘 =====
+      // 앱 아이콘
       StoreItem(
         id: 'icon_default',
         title: '기본 아이콘',
-        description: '기본 PlanIT 아이콘을 사용합니다. (무료)',
+        description: 'PlanIT의 기본 아이콘을 사용합니다. (무료)',
         cost: 0,
         category: StoreCategory.appIcon,
         icon: Icons.event_note,
@@ -165,13 +164,13 @@ class _StoreScreenState extends State<StoreScreen> {
       StoreItem(
         id: 'icon_minimal',
         title: '미니멀 아이콘',
-        description: '얇은 라인으로 그려진 심플한 아이콘입니다.',
+        description: '얇은 라인으로 그려진 심플한 미니멀 아이콘입니다.',
         cost: 5,
         category: StoreCategory.appIcon,
         icon: Icons.circle_outlined,
       ),
 
-      // ===== 투두 기능 아이템 =====
+      // 기능 아이템
       StoreItem(
         id: 'feature_confetti',
         title: '완료 축하 효과',
@@ -183,7 +182,7 @@ class _StoreScreenState extends State<StoreScreen> {
       StoreItem(
         id: 'feature_daily_quote',
         title: '오늘의 문장 위젯',
-        description: '투두 리스트 상단에 동기부여 문장을 띄워줍니다.',
+        description: '메인 화면 상단에 동기부여 문장을 띄워줍니다.',
         cost: 20,
         category: StoreCategory.feature,
         icon: Icons.format_quote,
@@ -194,12 +193,11 @@ class _StoreScreenState extends State<StoreScreen> {
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final pts = prefs.getInt('points') ?? 0; // 출석 체크랑 동일 키
+    final pts = prefs.getInt('points') ?? 0;
     final ownedList = prefs.getStringList('ownedStoreItems') ?? [];
     final savedThemeId = prefs.getString('selectedThemeItemId');
     final savedIconId = prefs.getString('selectedIconItemId');
 
-    // 무료 아이템은 항상 소유 처리
     final ownedSet = ownedList.toSet();
     for (final item in _items.where((e) => e.cost == 0)) {
       ownedSet.add(item.id);
@@ -257,13 +255,11 @@ class _StoreScreenState extends State<StoreScreen> {
       item.isOwned = true;
       _ownedItemIds.add(item.id);
 
-      // 테마/아이콘은 구매와 동시에 적용
       if (item.category == StoreCategory.theme) {
         _selectedThemeItemId = item.id;
       } else if (item.category == StoreCategory.appIcon) {
         _selectedIconItemId = item.id;
       }
-      // feature 타입은 소유만 해도 바로 활성화(별도 적용 과정 x)
     });
 
     await _saveData();
@@ -282,6 +278,7 @@ class _StoreScreenState extends State<StoreScreen> {
     }
 
     if (item.category == StoreCategory.feature) {
+      // 기능 아이템은 구매만 해도 항상 활성 상태라고 가정
       return;
     }
 
@@ -301,54 +298,7 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: _scaffoldBackground,
-      appBar: AppBar(
-        backgroundColor: _appBarBackground,
-        foregroundColor: _appBarForeground,
-        title: const Text('포인트 상점'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: Center(
-              child: Chip(
-                backgroundColor: _chipBackground,
-                label: Text(
-                  '$_points P',
-                  style: TextStyle(
-                    color: _isLightTheme ? Colors.black : Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          children: [
-            _buildHeaderCard(context),
-            const SizedBox(height: 10),
-            Expanded(
-              child: _buildItemList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ===== 현재 선택된 아이콘/테마 라벨 =====
+  // 현재 선택된 아이콘/라벨
   IconData get _currentIconData {
     switch (_selectedIconItemId) {
       case 'icon_blue_planet':
@@ -385,15 +335,88 @@ class _StoreScreenState extends State<StoreScreen> {
     }
   }
 
-  Widget _buildHeaderCard(BuildContext context) {
-    final headerColor = _isLightTheme ? Colors.white : _cardBaseColor;
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: _scaffoldBackground,
+      appBar: AppBar(
+        backgroundColor: _appBarBackground,
+        foregroundColor: _appBarForeground,
+        title: const Text('포인트 상점'),
+        elevation: 0,
+        actions: [
+          _buildPointChip(points: _points),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(14.0),
+        child: Column(
+          children: [
+            _buildHeaderCard(),
+            const SizedBox(height: 12),
+            Expanded(child: _buildItemList()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 메인·출석 화면과 동일한 포인트 UI
+  Widget _buildPointChip({required int points}) {
+    final isLight = _isLightTheme;
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: headerColor,
-        borderRadius: BorderRadius.circular(18),
+        color: isLight ? Colors.black.withOpacity(0.04) : const Color(0xFF262744),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: isLight ? Colors.black.withOpacity(0.08) : Colors.white24,
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: const BoxDecoration(
+              color: _goldColor,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.star,
+              size: 14,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$points P',
+            style: TextStyle(
+              color: isLight ? Colors.black87 : Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 상단 인포 카드
+  Widget _buildHeaderCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _cardBackground,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         children: [
@@ -401,7 +424,7 @@ class _StoreScreenState extends State<StoreScreen> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: _iconBgColor,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
               _currentIconData,
@@ -433,24 +456,22 @@ class _StoreScreenState extends State<StoreScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           TextButton.icon(
             onPressed: () {
-              // 출석하기 → AttendanceScreen으로 이동
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const AttendanceScreen(),
                 ),
               );
             },
-            icon: Icon(
-              Icons.calendar_today_outlined,
-              size: 16,
-              color: _primaryTextColor,
+            style: TextButton.styleFrom(
+              foregroundColor: _primaryTextColor,
             ),
-            label: Text(
+            icon: const Icon(Icons.calendar_today_outlined, size: 16),
+            label: const Text(
               '출석하기',
-              style: TextStyle(fontSize: 11, color: _primaryTextColor),
+              style: TextStyle(fontSize: 11),
             ),
           ),
         ],
@@ -458,6 +479,7 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
+  // 카테고리별 리스트
   Widget _buildItemList() {
     final sections = <Widget>[];
 
@@ -481,13 +503,11 @@ class _StoreScreenState extends State<StoreScreen> {
       );
 
       sections.addAll(
-        categoryItems.map((item) => _buildItemTile(item)),
+        categoryItems.map(_buildItemTile),
       );
     }
 
-    return ListView(
-      children: sections,
-    );
+    return ListView(children: sections);
   }
 
   Widget _buildItemTile(StoreItem item) {
@@ -501,7 +521,6 @@ class _StoreScreenState extends State<StoreScreen> {
     }
 
     Widget trailing;
-
     if (item.category == StoreCategory.feature) {
       trailing = item.isOwned
           ? _buildOwnedFeatureTrailing(item)
@@ -518,14 +537,15 @@ class _StoreScreenState extends State<StoreScreen> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         color: _cardBackground,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: _iconBgColor,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           child: Icon(
             item.icon,
@@ -562,6 +582,7 @@ class _StoreScreenState extends State<StoreScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Text(
           '${item.cost} P',
@@ -577,12 +598,13 @@ class _StoreScreenState extends State<StoreScreen> {
           child: ElevatedButton(
             onPressed: canBuy ? () => _buyItem(item) : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: canBuy ? _accentColor : Colors.grey.shade500,
+              backgroundColor: canBuy ? _accentColor : Colors.grey.shade600,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 10),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
+              elevation: 0,
             ),
             child: const Text(
               '구매',
