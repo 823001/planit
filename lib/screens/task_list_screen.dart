@@ -842,7 +842,25 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
   Future<void> _saveTask() async {
     final title = _contentController.text.trim();
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      // 내용이 비어 있을 때는 그냥 리턴 (원래 로직 유지)
+      return;
+    }
+
+    if (_selectedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '마감 기한을 선택해 주세요.',
+            style: GoogleFonts.notoSansKr(
+              fontSize: 13,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     final user = _auth.currentUser;
     if (user == null) return;
@@ -850,22 +868,20 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
     try {
       DateTime? deadline;
-      if (_selectedDate != null) {
-        final time = _selectedTime ?? const TimeOfDay(hour: 23, minute: 59);
-        deadline = DateTime(
-          _selectedDate!.year,
-          _selectedDate!.month,
-          _selectedDate!.day,
-          time.hour,
-          time.minute,
-        );
-      }
+      final time = _selectedTime ?? const TimeOfDay(hour: 23, minute: 59);
+      deadline = DateTime(
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+        time.hour,
+        time.minute,
+      );
 
       final data = <String, dynamic>{
         'title': title,
         'isDone': false,
         'createdAt': FieldValue.serverTimestamp(),
-        'deadline': deadline != null ? Timestamp.fromDate(deadline) : null,
+        'deadline': Timestamp.fromDate(deadline),
       };
 
       final ref = await _firestore
@@ -876,20 +892,21 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           .collection('tasks')
           .add(data);
 
-      if (deadline != null) {
-        await NotificationService.scheduleDeadlineNotification(
-          notificationId: ref.id,
-          courseTitle: widget.courseTitle,
-          taskTitle: title,
-          deadline: deadline,
-        );
-      }
+      await NotificationService.scheduleDeadlineNotification(
+        notificationId: ref.id,
+        courseTitle: widget.courseTitle,
+        taskTitle: title,
+        deadline: deadline,
+      );
+
       if (mounted) Navigator.pop(context);
     } catch (e) {
+      // 필요하면 에러 처리 로그 추가 가능
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
