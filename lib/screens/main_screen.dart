@@ -39,19 +39,30 @@ class _MainScreenState extends State<MainScreen> {
     '미루지 말고 지금 시작하자',
   ];
 
+  // 오늘 한 번만 뽑아서 쓰는 문장
+  String? _todayQuote;
+
   // 공통 컬러/테마
   final Color _primaryColor = const Color(0xFF6768F0);
   final Color _backgroundTop = const Color(0xFF191C3D);
   final Color _backgroundBottom = const Color(0xFF101226);
-  final Color _cardBackground = const Color(0xFF262744);  // 어두운 카드
-  final Color _textPrimary = Colors.white;                // 카드 안 메인 텍스트
-  final Color _textSecondary = Colors.white70;            // 카드 안 서브 텍스트
+  final Color _cardBackground = const Color(0xFF262744); // 어두운 카드
+  final Color _textPrimary = Colors.white; // 카드 안 메인 텍스트
+  final Color _textSecondary = Colors.white70; // 카드 안 서브 텍스트
 
   @override
   void initState() {
     super.initState();
+    _pickTodayQuote();      // 오늘 문장 한 번만 선택(계속 바뀌는 문제 개선)
     _refreshData();
     _loadStoreFeatures();
+  }
+
+  // 오늘의 문장 한 번만 랜덤으로 선택
+  void _pickTodayQuote() {
+    if (_quotes.isEmpty) return;
+    final shuffled = List<String>.from(_quotes)..shuffle();
+    _todayQuote = shuffled.first;
   }
 
   Future<void> _loadStoreFeatures() async {
@@ -253,7 +264,8 @@ class _MainScreenState extends State<MainScreen> {
                           }
                         },
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: _primaryColor.withOpacity(0.4)),
+                          side:
+                          BorderSide(color: _primaryColor.withOpacity(0.4)),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
@@ -305,10 +317,12 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildDailyQuoteCard() {
-    if (!_dailyQuoteEnabled) return const SizedBox.shrink();
+    // 기능을 안 산 경우 or 오늘 문구가 없는 경우 -> 안 보여줌
+    if (!_dailyQuoteEnabled || _todayQuote == null) {
+      return const SizedBox.shrink();
+    }
 
-    final shuffled = List<String>.from(_quotes)..shuffle();
-    final quote = shuffled.first;
+    final quote = _todayQuote!;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -396,7 +410,8 @@ class _MainScreenState extends State<MainScreen> {
           actions: [
             Container(
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(18),
@@ -634,8 +649,8 @@ class _MainScreenState extends State<MainScreen> {
                 top: 0,
                 right: 0,
                 child: Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.pinkAccent,
                     borderRadius: BorderRadius.circular(999),

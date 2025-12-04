@@ -58,7 +58,6 @@ class _StoreScreenState extends State<StoreScreen> {
     StoreCategory.feature: '추가 기능',
   };
 
-  // 공통 팔레트 (메인/출석과 맞춤)
   static const Color _bgColor = Color(0xFF1B1C3A);
   static const Color _cardBaseColor = Color(0xFF262744);
   static const Color _accentColor = Color(0xFF6768F0);
