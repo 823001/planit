@@ -3,6 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'attendance_screen.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class StoreScreen extends StatefulWidget {
   const StoreScreen({super.key});
 
@@ -40,6 +43,9 @@ class _StoreScreenState extends State<StoreScreen> {
   bool _isLoading = true;
   int _points = 0;
   Set<String> _ownedItemIds = {};
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   String _selectedThemeItemId = 'theme_default';
   String _selectedIconItemId = 'icon_default';
@@ -193,7 +199,25 @@ class _StoreScreenState extends State<StoreScreen> {
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final pts = prefs.getInt('points') ?? 0;
+    // 🔹 1) Firestore에서 포인트 읽기
+    int pts = 0;
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        final data = doc.data();
+        final p = data?['points'];
+        if (p is int) {
+          pts = p;
+        } else if (p is num) {
+          pts = p.toInt();
+        }
+      } catch (e) {
+        debugPrint('StoreScreen 포인트 로드 오류: $e');
+      }
+    }
+
+    // 🔹 2) 나머지(보유 아이템, 테마, 아이콘)는 기존처럼 SharedPreferences 사용
     final ownedList = prefs.getStringList('ownedStoreItems') ?? [];
     final savedThemeId = prefs.getString('selectedThemeItemId');
     final savedIconId = prefs.getString('selectedIconItemId');
@@ -214,7 +238,7 @@ class _StoreScreenState extends State<StoreScreen> {
     }
 
     setState(() {
-      _points = pts;
+      _points = pts;                       // 🔹 여기서 Firestore에서 읽어온 값 사용
       _ownedItemIds = ownedSet;
       _selectedThemeItemId = themeId;
       _selectedIconItemId = iconId;
@@ -227,13 +251,29 @@ class _StoreScreenState extends State<StoreScreen> {
     });
   }
 
+
   Future<void> _saveData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('points', _points);
+    // await prefs.setInt('points', _points);
     await prefs.setStringList('ownedStoreItems', _ownedItemIds.toList());
     await prefs.setString('selectedThemeItemId', _selectedThemeItemId);
     await prefs.setString('selectedIconItemId', _selectedIconItemId);
   }
+
+  Future<void> _savePointsToFirestore() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .set({'points': _points}, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('StoreScreen 포인트 저장 오류: $e');
+    }
+  }
+
 
   Future<void> _buyItem(StoreItem item) async {
     if (item.isOwned) {
@@ -262,12 +302,17 @@ class _StoreScreenState extends State<StoreScreen> {
       }
     });
 
+    // 🔹 Firestore 포인트 반영
+    await _savePointsToFirestore();
+
+    // 🔹 로컬(보유 아이템/테마/아이콘) 저장
     await _saveData();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('\'${item.title}\'를(을) 구매했어요!')),
     );
   }
+
 
   Future<void> _applyItem(StoreItem item) async {
     if (!item.isOwned) {
