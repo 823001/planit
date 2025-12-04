@@ -37,21 +37,57 @@ class _MainScreenState extends State<MainScreen> {
     '완벽보다 완료가 더 중요하다.',
     '작은 습관이 큰 변화를 만든다.',
     '미루지 말고 지금 시작하자',
+    '꿈을 계속 간직하고 있으면 반드시 실현할 때가 온다.',
+    '내일이란 오늘의 다른 이름일 뿐이다.',
+    '시간은 우리 각자가 가진 고유의 재산이요, 유일한 재산이다.',
+    '오늘이라는 날은 두 번 다시 오지 않는다는 것을 잊지 말라.',
+    '계획이란 미래에 대한 현재의 결정이다.',
+    '고난이 지나면 반드시 기쁨이 스며든다.',
+    '시간은 말로써 나타낼 수 없을 만큼 멋진 만물의 소재이다.',
+    '시간을 선택하는 것은 시간을 절약하는 것이다.',
+    '시간을 잘 붙잡는 사람은 모든 것을 얻을 수 있다.',
+    '부지런히 노력하는 사람이 결국 많은 대가를 얻는다.',
+    '그대의 하루하루를 그대의 마지막 날이라고 생각하라.',
+    '내일은 시련에 대응하는 새로운 힘을 가져다줄 것이다.',
+    '승자는 시간을 관리하며 살고, 패자는 시간에 끌려 산다.',
+    '시간과 정성을 들이지 않고 얻을 수 있는 결실은 없다.',
+    '하루하루를 우리의 마지막 날인 듯이 보내야 한다.',
+    '시간의 참된 가치를 알라. 그것을 붙잡아라. 억류하라.',
+    '일은 그것이 쓰일 수 있는 시간이 있는 만큼 팽창한다.',
+    '끝을 맺기를 처음과 같이 하면 실패가 없다.',
+    '오늘 할 수 있는 일에만 전력을 쏟으라.',
+    '좋은 희망을 품는 것은 그것을 이룰 수 있는 지름길이다.',
+    '사람은 자기가 한 약속을 지킬만한 좋은 기억력을 가져야 한다.',
+    '중요한 건 당신이 어떻게 시작했는가가 아니리라 어떻게 끝내는 가이다.',
+    '문제는 목적지에 얼마나 빨리 가느냐가 아니라 그 목적지가 어디냐는 것이다.',
+    '한 번 실패와 영원한 실패를 혼동하지 마라.',
+    '인생에 뜻을 세우는 데 있어 늦은 때라곤 없다',
   ];
+
+  // 오늘 한 번만 뽑아서 쓰는 문장
+  String? _todayQuote;
 
   // 공통 컬러/테마
   final Color _primaryColor = const Color(0xFF6768F0);
   final Color _backgroundTop = const Color(0xFF191C3D);
   final Color _backgroundBottom = const Color(0xFF101226);
-  final Color _cardBackground = const Color(0xFF262744);  // 어두운 카드
-  final Color _textPrimary = Colors.white;                // 카드 안 메인 텍스트
-  final Color _textSecondary = Colors.white70;            // 카드 안 서브 텍스트
+  final Color _cardBackground = const Color(0xFF262744); // 어두운 카드
+  final Color _textPrimary = Colors.white; // 카드 안 메인 텍스트
+  final Color _textSecondary = Colors.white70; // 카드 안 서브 텍스트
 
   @override
   void initState() {
     super.initState();
+    _pickTodayQuote();      // 오늘 문장 한 번만 선택(계속 바뀌는 문제 개선)
     _refreshData();
     _loadStoreFeatures();
+  }
+
+  // 오늘의 문장 한 번만 랜덤으로 선택
+  void _pickTodayQuote() {
+    if (_quotes.isEmpty) return;
+    final shuffled = List<String>.from(_quotes)..shuffle();
+    _todayQuote = shuffled.first;
   }
 
   Future<void> _loadStoreFeatures() async {
@@ -253,7 +289,8 @@ class _MainScreenState extends State<MainScreen> {
                           }
                         },
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: _primaryColor.withOpacity(0.4)),
+                          side:
+                          BorderSide(color: _primaryColor.withOpacity(0.4)),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
@@ -305,10 +342,12 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildDailyQuoteCard() {
-    if (!_dailyQuoteEnabled) return const SizedBox.shrink();
+    // 기능을 안 산 경우 or 오늘 문구가 없는 경우 -> 안 보여줌
+    if (!_dailyQuoteEnabled || _todayQuote == null) {
+      return const SizedBox.shrink();
+    }
 
-    final shuffled = List<String>.from(_quotes)..shuffle();
-    final quote = shuffled.first;
+    final quote = _todayQuote!;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -396,7 +435,8 @@ class _MainScreenState extends State<MainScreen> {
           actions: [
             Container(
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(18),
@@ -634,8 +674,8 @@ class _MainScreenState extends State<MainScreen> {
                 top: 0,
                 right: 0,
                 child: Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.pinkAccent,
                     borderRadius: BorderRadius.circular(999),
