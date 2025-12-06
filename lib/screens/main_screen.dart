@@ -78,17 +78,58 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    _pickTodayQuote();      // 오늘 문장 한 번만 선택(계속 바뀌는 문제 개선)
+    ///_pickTodayQuote();      // 오늘 문장 한 번만 선택(계속 바뀌는 문제 개선)
+    _initTodayQuote();
     _refreshData();
     _loadStoreFeatures();
   }
 
   // 오늘의 문장 한 번만 랜덤으로 선택
-  void _pickTodayQuote() {
+  /*void _pickTodayQuote() {
     if (_quotes.isEmpty) return;
     final shuffled = List<String>.from(_quotes)..shuffle();
     _todayQuote = shuffled.first;
+  }*/
+
+  static const String _quotePrefsDateKey = 'daily_quote_date';
+  static const String _quotePrefsTextKey = 'daily_quote_text';
+
+  Future<void> _initTodayQuote() async {
+    if (_quotes.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+
+    final today = DateTime.now();
+    final todayStr =
+        '${today.year.toString().padLeft(4, '0')}-'
+        '${today.month.toString().padLeft(2, '0')}-'
+        '${today.day.toString().padLeft(2, '0')}';
+
+    final savedDate = prefs.getString(_quotePrefsDateKey);
+    final savedQuote = prefs.getString(_quotePrefsTextKey);
+
+    if (savedDate == todayStr &&
+        savedQuote != null &&
+        _quotes.contains(savedQuote)) {
+      setState(() {
+        _todayQuote = savedQuote;
+      });
+      return;
+    }
+
+    final shuffled = List<String>.from(_quotes)..shuffle();
+    final newQuote = shuffled.first;
+
+    await prefs.setString(_quotePrefsDateKey, todayStr);
+    await prefs.setString(_quotePrefsTextKey, newQuote);
+
+    if (mounted) {
+      setState(() {
+        _todayQuote = newQuote;
+      });
+    }
   }
+
 
   Future<void> _loadStoreFeatures() async {
     final prefs = await SharedPreferences.getInstance();
@@ -343,7 +384,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildDailyQuoteCard() {
     // 기능을 안 산 경우 or 오늘 문구가 없는 경우 -> 안 보여줌
-    if (!_dailyQuoteEnabled || _todayQuote == null) {
+    if (/*!_dailyQuoteEnabled ||*/ _todayQuote == null) {
       return const SizedBox.shrink();
     }
 
