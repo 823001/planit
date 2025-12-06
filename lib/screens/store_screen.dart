@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'dart:math';
 import 'attendance_screen.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -192,6 +192,14 @@ class _StoreScreenState extends State<StoreScreen> {
         category: StoreCategory.feature,
         icon: Icons.format_quote,
       ),
+      StoreItem(
+        id: 'item_random_box',
+        title: '랜덤 포인트 박스',
+        description: '10P를 사용해 랜덤박스를 열어보세요!',
+        cost: 10,
+        category: StoreCategory.feature,
+        icon: Icons.card_giftcard,
+      ),
     ];
   }
 
@@ -275,6 +283,34 @@ class _StoreScreenState extends State<StoreScreen> {
 
 
   Future<void> _buyItem(StoreItem item) async {
+    if (item.id == 'item_random_box') {
+      if (_points < item.cost) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('포인트가 부족합니다. 출석 체크로 포인트를 모아보세요!')),
+        );
+        return;
+      }
+
+      setState(() {
+        _points -= item.cost;
+      });
+
+      final randomPoint = (Random().nextInt(10)+1) * 5;
+
+      setState((){
+        _points += randomPoint;
+      });
+
+      await _savePointsToFirestore();
+      await _saveData();
+
+      if (mounted) {
+        _showGachaResultDialog(randomPoint);
+      }
+      return;
+
+    }
+
     if (item.isOwned) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('이미 구매한 아이템이에요.')),
@@ -790,6 +826,58 @@ class _StoreScreenState extends State<StoreScreen> {
           size: 18,
         ),
       ],
+    );
+  }
+
+  void _showGachaResultDialog(int earnedPoint){
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF262744),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Center(
+            child: Icon(Icons.stars, size:48, color: Color(0xFFE9C46A)),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '축하합니다! 🎉',
+                style: TextStyle (
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Text(
+                '$earnedPoint P',
+                style: const TextStyle(
+                  color: Color(0xFFE9C46A),
+                  fontSize: 36,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              const Text(
+                '를 획득했어요!',
+                style: TextStyle(color: Colors.white70, fontSize:14),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('확인', style: TextStyle(color: Color(0xFF6768F0))),
+            ),
+          ],
+        );
+      },
     );
   }
 }
