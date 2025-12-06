@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:planit/screens/register_screen.dart';
 import 'package:planit/screens/main_screen.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'dart:io';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,11 +20,34 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  bool _showPermissionGuide = true;
+
   final Color _primaryColor = const Color(0xFF6768F0);
   final Color _backgroundTop = const Color(0xFF191C3D);
   final Color _backgroundBottom = const Color(0xFF101226);
   final Color _cardBackground = const Color(0xFF262744);
   final Color _fieldBackground = const Color(0xFF262744);
+
+  Future<void> _handlePermissionClick() async {
+    if (mounted) {
+      setState(() {
+        _showPermissionGuide = false;
+      });
+    }
+
+    if (Platform.isAndroid) {
+      final androidPlugin = FlutterLocalNotificationsPlugin()
+          .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlugin?.requestNotificationsPermission();
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('확인되었습니다.')),
+      );
+    }
+  }
 
   Future<void> _login() async {
     final email = _emailController.text.trim();
@@ -307,13 +332,17 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
+                        if (_showPermissionGuide) ...[
+                          const SizedBox(height: 24),
+                          _buildPermissionBox(),
+                        ],
+
+                        if (_showPermissionGuide)
+                          const SizedBox(height: 32),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 24),
-                  _buildPermissionBox(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height:32),
                 ],
               ),
             ),
@@ -360,9 +389,7 @@ class _LoginScreenState extends State<LoginScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {
-                // TODO: 실제 알림 권한 요청 로직 연결
-              },
+              onPressed: _handlePermissionClick,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 elevation: 0,
