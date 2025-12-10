@@ -1,16 +1,112 @@
-# planit
+# **PlanIT**
 
-A new Flutter project.
+---
 
-## Getting Started
+## 소개
 
-This project is a starting point for a Flutter application.
+**PlanIT**은 Flutter와 Firebase 기반으로 개발된 시간표 관리 + 할 일 관리 + 출석 체크 + 포인트 상점 시스템을 제공하는 대학생 맞춤형 생산성 앱입니다.
 
-A few resources to get you started if this is your first Flutter project:
+사용자는 시간표를 생성·관리하고, 과목별 할 일을 정리하며, 출석 체크로 포인트를 받을 수 있습니다.  
+또한 앱 내 상점에서 테마/아이콘 등을 구매하여 개인화된 UI 경험을 누릴 수 있습니다.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+PlanIT은 학생들이 하루를 체계적으로 관리하고 동기부여를 유지할 수 있도록 돕는 모바일 애플리케이션입니다.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+---
+
+## 기술 스택
+
+PlanIT은 최신 기술을 활용하여 안정적이고 효율적인 사용자 경험을 제공합니다.
+
+### Flutter
+- Android/iOS 모두에서 동일한 UI/UX 제공  
+- 빠른 개발 속도 및 높은 성능  
+- 직관적 위젯 기반 UI 구성  
+
+### Firebase
+- **Auth**: 이메일/비밀번호 기반 로그인 및 회원가입  
+- **Firestore**: 시간표, 할 일, 출석, 포인트 등 데이터 관리  
+- **Firebase Messaging**: 알림 전송  
+- **Storage**: 프로필 이미지·파일 저장  
+
+---
+
+## 구현 상태
+
+### ✨ 일관된 디자인
+- Flutter로 전체 UI/UX 커스텀  
+- 다크톤 기반의 전문적인 디자인 적용  
+
+### ✨ 주요 화면 구성
+- 로그인 / 회원가입  
+- 메인 대시보드  
+- 시간표 관리  
+- 할 일 목록  
+- 출석 체크  
+- 포인트 상점
+
+---
+
+## 주요 기능
+
+### ✨ 회원가입 및 로그인
+- **회원가입**: 이메일, 비밀번호 입력으로 계정 생성  
+- **로그인**: 생성된 계정 정보로 앱 이용  
+- **알림 권한 설정** 제공  
+
+---
+
+### ✨ 시간표 관리
+- 강의 추가(이름, 요일, 시간대, 장소)  
+- 강의 삭제 및 수정  
+- 요일 탭/스와이프로 이동  
+- Firestore 실시간 저장  
+
+---
+
+### ✨ 할 일 목록
+- 강의별 할 일 등록  
+- 할 일 완료 체크 기능  
+- 과목별 할 일 목록 제공  
+
+---
+
+### ✨ 출석 체크
+- 캘린더 UI 기반 출석 확인  
+- 연속 출석 보너스  
+- 출석 시 포인트 지급  
+- 출석 통계 표시  
+
+---
+
+### ✨ 포인트 상점
+- 포인트로 테마 및 아이콘 구매  
+- 현재 보유 포인트 표시  
+- 구매한 테마 적용  
+- 구매 여부 UI 표시  
+
+---
+
+### ✨ 활동 내역
+- 이번 주 학습 통계  
+- 계획 진행률 및 출석률 시각화  
+- 사용자 성장 데이터 제공  
+
+---
+
+### ✨ 기타 기능
+- 직관적 UI/UX  
+- 데이터 안정적 저장 및 실시간 동기화   
+
+---
+
+## 설치
+
+### 요구사항
+- Flutter SDK 3.10.0 이상
+- Android Studio  
+
+---
+
+### 설치 파일
+
+- 앱_설치파일.zip 압축 해제 후 .apk 파일 설치
