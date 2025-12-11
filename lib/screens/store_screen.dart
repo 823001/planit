@@ -703,6 +703,7 @@ class _StoreScreenState extends State<StoreScreen> {
     if (isApplied) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: const [
           Text(
@@ -713,7 +714,7 @@ class _StoreScreenState extends State<StoreScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 4),
+          SizedBox(height: 2),
           Icon(
             Icons.check_circle,
             color: _goldColor,
@@ -725,23 +726,25 @@ class _StoreScreenState extends State<StoreScreen> {
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
           '구매 완료',
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 10,
             color: Colors.grey,
+            height:1.0,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         SizedBox(
-          height: 28,
+          height: 24,
           child: OutlinedButton(
             onPressed: () => _applyItem(item),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: _accentColor),
               foregroundColor: _accentColor,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -763,6 +766,7 @@ class _StoreScreenState extends State<StoreScreen> {
     if (isApplied) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: const [
           Text(
@@ -784,7 +788,7 @@ class _StoreScreenState extends State<StoreScreen> {
     }
 
     return SizedBox(
-      height: 28,
+      height: 26,
       child: OutlinedButton(
         onPressed: () => _applyItem(item),
         style: OutlinedButton.styleFrom(
@@ -809,6 +813,7 @@ class _StoreScreenState extends State<StoreScreen> {
   Widget _buildOwnedFeatureTrailing(StoreItem item) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: const [
         Text(
