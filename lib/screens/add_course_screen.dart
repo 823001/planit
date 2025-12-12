@@ -1,4 +1,3 @@
-// add_course_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,11 +5,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AddCourseScreen extends StatefulWidget {
-  final Map<String, dynamic>? course; // 수정 시 기존 데이터
-  final String? courseId; // 수정 시 docId
+  final String timetableId;
+
+  final Map<String, dynamic>? course;
+  final String? courseId;
 
   const AddCourseScreen({
     super.key,
+    required this.timetableId,
     this.course,
     this.courseId,
   });
@@ -37,7 +39,6 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
 
   bool _isSaving = false;
 
-  // 메인 화면과 맞춘 컬러
   final Color _primaryColor = const Color(0xFF6768F0);
   final Color _backgroundTop = const Color(0xFF191C3D);
   final Color _backgroundBottom = const Color(0xFF101226);
@@ -54,12 +55,8 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
       _roomController.text = (c['room'] ?? '') as String;
       _profController.text = (c['prof'] ?? '') as String;
       _selectedDay = c['day'] as String?;
-      if (c['startTime'] != null) {
-        _startTime = _parseTime(c['startTime'] as String);
-      }
-      if (c['endTime'] != null) {
-        _endTime = _parseTime(c['endTime'] as String);
-      }
+      if (c['startTime'] != null) _startTime = _parseTime(c['startTime'] as String);
+      if (c['endTime'] != null) _endTime = _parseTime(c['endTime'] as String);
     }
   }
 
@@ -101,22 +98,17 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
           child: Column(
             children: [
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: const BoxDecoration(
                   color: Color(0xFF25254A),
-                  borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       isStart ? '시작 시간 선택' : '종료 시간 선택',
-                      style: GoogleFonts.notoSansKr(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
+                      style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14),
                     ),
                     TextButton(
                       onPressed: () => Navigator.pop(context),
@@ -134,25 +126,14 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
               ),
               Expanded(
                 child: CupertinoTheme(
-                  data: const CupertinoThemeData(
-                    brightness: Brightness.dark,
-                  ),
+                  data: const CupertinoThemeData(brightness: Brightness.dark),
                   child: CupertinoDatePicker(
                     mode: CupertinoDatePickerMode.time,
-                    initialDateTime: DateTime(
-                      2023,
-                      1,
-                      1,
-                      initTime.hour,
-                      initTime.minute,
-                    ),
+                    initialDateTime: DateTime(2023, 1, 1, initTime.hour, initTime.minute),
                     use24hFormat: false,
                     onDateTimeChanged: (DateTime newDate) {
                       setState(() {
-                        final t = TimeOfDay(
-                          hour: newDate.hour,
-                          minute: newDate.minute,
-                        );
+                        final t = TimeOfDay(hour: newDate.hour, minute: newDate.minute);
                         if (isStart) {
                           _startTime = t;
                         } else {
@@ -202,13 +183,16 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
       'day': _selectedDay,
       'startTime': _formatTime(_startTime!),
       'endTime': _formatTime(_endTime!),
-      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      if (!isEdit) 'createdAt': FieldValue.serverTimestamp(),
     };
 
     try {
       final ref = _firestore
           .collection('users')
           .doc(user.uid)
+          .collection('timetables')
+          .doc(widget.timetableId)
           .collection('courses');
 
       if (isEdit) {
@@ -217,12 +201,18 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
         await ref.add(data);
       }
 
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('timetables')
+          .doc(widget.timetableId)
+          .update({'updatedAt': FieldValue.serverTimestamp()});
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-          Text(isEdit ? '강의가 수정되었습니다.' : '강의가 성공적으로 추가되었습니다.'),
+          content: Text(isEdit ? '강의가 수정되었습니다.' : '강의가 성공적으로 추가되었습니다.'),
         ),
       );
       Navigator.pop(context, true);
@@ -255,10 +245,7 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
           backgroundColor: Colors.transparent,
           title: Text(
             isEdit ? '강의 수정' : '강의 추가',
-            style: GoogleFonts.notoSansKr(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+            style: GoogleFonts.notoSansKr(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           centerTitle: false,
           leadingWidth: 0,
@@ -317,9 +304,7 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
                           ),
                         ),
                         const SizedBox(width: 16),
-                        Expanded(
-                          child: _dropdownField(),
-                        ),
+                        Expanded(child: _dropdownField()),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -345,19 +330,17 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
                     ),
 
                     const SizedBox(height: 28),
+
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: BorderSide(
-                                color: Colors.white24,
-                              ),
+                              side: BorderSide(color: Colors.white24),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(18),
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             onPressed: () => Navigator.pop(context),
                             child: Text(
@@ -379,8 +362,7 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(18),
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             onPressed: _isSaving ? null : _saveClass,
                             child: _isSaving
@@ -433,21 +415,14 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: controller,
-          style: GoogleFonts.notoSansKr(
-            color: Colors.white,
-            fontSize: 14,
-          ),
+          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
           cursorColor: Colors.white70,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: GoogleFonts.notoSansKr(
-              color: Colors.white38,
-              fontSize: 13,
-            ),
+            hintStyle: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 13),
             filled: true,
             fillColor: _fieldBackground,
-            contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(color: Colors.white10),
@@ -485,28 +460,16 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: _selectedDay,
-              hint: Text(
-                '선택',
-                style: GoogleFonts.notoSansKr(
-                  color: Colors.white38,
-                  fontSize: 13,
-                ),
-              ),
+              hint: Text('선택', style: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 13)),
               dropdownColor: const Color(0xFF2D2C59),
               icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
               isExpanded: true,
-              items: _daysList.map((day) {
-                return DropdownMenuItem(
-                  value: day,
-                  child: Text(
-                    day,
-                    style: GoogleFonts.notoSansKr(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
-                  ),
-                );
-              }).toList(),
+              items: _daysList
+                  .map((day) => DropdownMenuItem(
+                value: day,
+                child: Text(day, style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14)),
+              ))
+                  .toList(),
               onChanged: (val) => setState(() => _selectedDay = val),
             ),
           ),
@@ -535,8 +498,7 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
         GestureDetector(
           onTap: () => _pickTime(isStart),
           child: Container(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             decoration: BoxDecoration(
               color: _fieldBackground,
               borderRadius: BorderRadius.circular(14),
@@ -548,13 +510,11 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
                 Text(
                   time != null ? time.format(context) : '선택',
                   style: GoogleFonts.notoSansKr(
-                    color:
-                    time != null ? Colors.white : Colors.white38,
+                    color: time != null ? Colors.white : Colors.white38,
                     fontSize: 14,
                   ),
                 ),
-                const Icon(Icons.access_time,
-                    color: Colors.white70, size: 18),
+                const Icon(Icons.access_time, color: Colors.white70, size: 18),
               ],
             ),
           ),
