@@ -19,6 +19,21 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
+class _DueSoonItem {
+  final String timetableName;
+  final String courseTitle;
+  final String taskTitle;
+  final DateTime deadline;
+
+  _DueSoonItem({
+    required this.timetableName,
+    required this.courseTitle,
+    required this.taskTitle,
+    required this.deadline,
+  });
+}
+
+
 class _MainScreenState extends State<MainScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _points = 0;
@@ -33,22 +48,23 @@ class _MainScreenState extends State<MainScreen> {
 
   bool _dailyQuoteEnabled = false;
 
-  // Firestore에서 읽어올 실제 명언 리스트
   List<String> _quotes = [];
   static const List<String> _defaultQuotes = [];
-  // 오늘 한 번만 뽑아서 쓰는 문장
   String? _todayQuote;
 
-  // 공통 컬러/테마
   final Color _primaryColor = const Color(0xFF6768F0);
   final Color _backgroundTop = const Color(0xFF191C3D);
   final Color _backgroundBottom = const Color(0xFF101226);
-  final Color _cardBackground = const Color(0xFF262744); // 어두운 카드
-  final Color _textPrimary = Colors.white; // 카드 안 메인 텍스트
-  final Color _textSecondary = Colors.white70; // 카드 안 서브 텍스트
+  final Color _cardBackground = const Color(0xFF262744);
+  final Color _textPrimary = Colors.white;
+  final Color _textSecondary = Colors.white70;
 
   static const String _quotePrefsDateKey = 'daily_quote_date';
   static const String _quotePrefsTextKey = 'daily_quote_text';
+
+  static const String _prefsSelectedTimetableKey = 'selected_timetable_id';
+
+  List<_DueSoonItem> _dueSoon = [];
 
   @override
   void initState() {
@@ -57,8 +73,6 @@ class _MainScreenState extends State<MainScreen> {
     _refreshData();
   }
 
-  // Firestore에서 명언 리스트 가져오기
-  // 경로: meta/quotes 문서, 필드: list (array<string>)
   Future<void> _loadQuotesFromFirestore() async {
     try {
       final doc = await _firestore.collection('meta').doc('quotes').get();
@@ -79,20 +93,15 @@ class _MainScreenState extends State<MainScreen> {
         }
       }
 
-      // 명언이 하나도 없는 경우 → 오늘의 문장 기능 비활성화
       setState(() {
         _quotes = [];
       });
-
     } catch (e) {
       print('오늘의 문구 Firestore 로드 오류: $e');
-
-      // 오류 시에도 기능을 켜지 않도록 empty 유지
       if (mounted) setState(() => _quotes = []);
     }
   }
 
-  // 오늘의 문구 한 번만 선택 (SharedPreferences에 오늘 날짜 기준으로 캐싱)
   Future<void> _initTodayQuote() async {
     if (_quotes.isEmpty) {
       setState(() {
@@ -108,13 +117,11 @@ class _MainScreenState extends State<MainScreen> {
     final savedDate = prefs.getString(_quotePrefsDateKey);
     final savedQuote = prefs.getString(_quotePrefsTextKey);
 
-    if (savedDate == todayStr &&
-        savedQuote != null &&
-        _quotes.contains(savedQuote)) {
+    if (savedDate == todayStr && savedQuote != null && _quotes.contains(savedQuote)) {
       setState(() => _todayQuote = savedQuote);
       return;
     }
-    // 새로 뽑기
+
     final newQuote = (_quotes..shuffle()).first;
 
     await prefs.setString(_quotePrefsDateKey, todayStr);
@@ -123,8 +130,6 @@ class _MainScreenState extends State<MainScreen> {
     setState(() => _todayQuote = newQuote);
   }
 
-  // 상점에서 산 기능 정보 로드
-  // feature_daily_quote 가지고 있으면 명언 로드 + 오늘 문장 뽑기까지 같이 처리
   Future<void> _loadStoreFeatures() async {
     final prefs = await SharedPreferences.getInstance();
     final owned = prefs.getStringList('ownedStoreItems') ?? [];
@@ -136,11 +141,9 @@ class _MainScreenState extends State<MainScreen> {
     });
 
     if (enabled) {
-      // 오늘의 문구 아이템을 산 경우에만 명언 로드 후 명언 선택
       await _loadQuotesFromFirestore();
       await _initTodayQuote();
     } else {
-      // 기능을 안 샀으면 명언 비움
       setState(() {
         _todayQuote = null;
       });
@@ -151,6 +154,7 @@ class _MainScreenState extends State<MainScreen> {
     await _loadPoints();
     await _loadTaskStats();
     await _loadAttendanceStats();
+    await _loadDueSoonTasks();
   }
 
   Future<void> _loadPoints() async {
@@ -276,6 +280,81 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  Future<void> _loadDueSoonTasks() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _dueSoon = []);
+      return;
+    }
+
+    final now = DateTime.now();
+    final end = now.add(const Duration(hours: 24));
+
+    try {
+      final timetablesSnap = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('timetables')
+          .get();
+
+      final List<_DueSoonItem> items = [];
+
+      for (final tt in timetablesSnap.docs) {
+        final timetableId = tt.id;
+        final ttData = tt.data();
+        final timetableName = (ttData['name'] ?? '시간표') as String;
+
+        final coursesSnap = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('timetables')
+            .doc(timetableId)
+            .collection('courses')
+            .get();
+
+        for (final c in coursesSnap.docs) {
+          final cData = c.data();
+          final courseTitle = (cData['title'] ?? '강의명 없음') as String;
+
+          final tasksSnap = await c.reference
+              .collection('tasks')
+              .where('isDone', isEqualTo: false)
+              .where('deadline', isGreaterThan: Timestamp.fromDate(now))
+              .where('deadline', isLessThanOrEqualTo: Timestamp.fromDate(end))
+              .orderBy('deadline', descending: false)
+              .get();
+
+          for (final t in tasksSnap.docs) {
+            final tData = t.data();
+            final taskTitle = (tData['title'] ?? '제목 없음') as String;
+
+            DateTime? deadline;
+            if (tData['deadline'] is Timestamp) {
+              deadline = (tData['deadline'] as Timestamp).toDate();
+            }
+            if (deadline == null) continue;
+
+            items.add(_DueSoonItem(
+              timetableName: timetableName,
+              courseTitle: courseTitle,
+              taskTitle: taskTitle,
+              deadline: deadline,
+            ));
+          }
+        }
+      }
+
+
+      items.sort((a, b) => a.deadline.compareTo(b.deadline));
+
+      if (mounted) setState(() => _dueSoon = items);
+    } catch (e) {
+      debugPrint('🔥 loadDueSoonTasks error: $e');
+      if (mounted) setState(() => _dueSoon = []);
+    }
+  }
+
+
   void _showExitDialog() {
     showDialog(
       context: context,
@@ -337,13 +416,11 @@ class _MainScreenState extends State<MainScreen> {
                           }
                         },
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                              color: _primaryColor.withOpacity(0.4)),
+                          side: BorderSide(color: _primaryColor.withOpacity(0.4)),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          padding:
-                          const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                         child: Text(
                           '로그아웃',
@@ -368,8 +445,7 @@ class _MainScreenState extends State<MainScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          padding:
-                          const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           elevation: 0,
                         ),
                         child: Text(
@@ -392,7 +468,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildDailyQuoteCard() {
-    // 기능을 안 샀거나, 아직 오늘 문구가 없는 경우 -> 안 보여줌
     if (!_dailyQuoteEnabled || _todayQuote == null) {
       return const SizedBox.shrink();
     }
@@ -456,6 +531,76 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  Widget _buildDueSoonCard() {
+    if (_dueSoon.isEmpty) return const SizedBox.shrink();
+
+    String fmt(DateTime d) {
+      return '${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')} '
+          '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    }
+
+    final top = _dueSoon.take(10).toList();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _cardBackground,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.redAccent.withOpacity(0.25)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.notifications_active, color: Colors.redAccent, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                '마감 24시간 이내',
+                style: GoogleFonts.notoSansKr(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...top.map((e) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('• ', style: TextStyle(color: Colors.white70)),
+                  Expanded(
+                    child: Text(
+                        '[${e.timetableName}] ${e.courseTitle} · ${e.taskTitle}  (${fmt(e.deadline)})',
+                        style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white70),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          if (_dueSoon.length > 3)
+            Text(
+              '외 ${_dueSoon.length - 3}개 더 있음',
+              style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white54),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -485,8 +630,7 @@ class _MainScreenState extends State<MainScreen> {
           actions: [
             Container(
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(18),
@@ -546,8 +690,7 @@ class _MainScreenState extends State<MainScreen> {
                 const Spacer(),
                 const Divider(color: Colors.white24),
                 ListTile(
-                  leading:
-                  const Icon(Icons.exit_to_app, color: Colors.white70),
+                  leading: const Icon(Icons.exit_to_app, color: Colors.white70),
                   title: Text(
                     '종료하기',
                     style: GoogleFonts.notoSansKr(
@@ -584,6 +727,7 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                   const SizedBox(height: 18),
                   _buildDailyQuoteCard(),
+                  _buildDueSoonCard(),
                   GridView.count(
                     crossAxisCount: 2,
                     shrinkWrap: true,
@@ -725,8 +869,7 @@ class _MainScreenState extends State<MainScreen> {
                 top: 0,
                 right: 0,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.pinkAccent,
                     borderRadius: BorderRadius.circular(999),
@@ -790,8 +933,7 @@ class _MainScreenState extends State<MainScreen> {
           _buildStatBar(
             title: '출석률',
             value: _attendanceRate,
-            displayText:
-            '$_attendanceDays/7일 (${(_attendanceRate * 100).toInt()}%)',
+            displayText: '$_attendanceDays/7일 (${(_attendanceRate * 100).toInt()}%)',
           ),
           const SizedBox(height: 16),
           _buildStatBar(
