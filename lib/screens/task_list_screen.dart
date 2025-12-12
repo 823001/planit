@@ -777,7 +777,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? now,
-      firstDate: DateTime(now.year - 1),
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: DateTime(now.year + 5),
       builder: (context, child) {
         return Theme(
@@ -792,7 +792,19 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         );
       },
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked != null) { // 오늘 날짜를 골랐는데 시간이 과거로 남아있는 경우
+      setState(() => _selectedDate = picked);
+
+      final now2 = DateTime.now();
+      final time = _selectedTime ?? const TimeOfDay(hour: 23, minute: 59);
+      final candidate = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute);
+
+      if (!candidate.isAfter(now2)) {
+        setState(() {
+          _selectedTime = TimeOfDay(hour: now2.hour, minute: now2.minute);
+        });
+      }
+    }
   }
 
   Future<void> _pickTime() async {
@@ -882,6 +894,19 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         time.hour,
         time.minute,
       );
+
+      final now = DateTime.now();
+      if (!deadline.isAfter(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('현재 날짜/시간 이후로 마감 기한을 설정해 주세요.',
+                style: GoogleFonts.notoSansKr(fontSize: 13)),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
 
       final data = <String, dynamic>{
         'title': title,
@@ -1180,7 +1205,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? now,
-      firstDate: DateTime(now.year - 1),
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: DateTime(now.year + 5),
       builder: (context, child) {
         return Theme(
@@ -1195,7 +1220,20 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
         );
       },
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked != null) { // 오늘 날짜를 골랐는데 시간이 과거로 남아있는 경우
+      setState(() => _selectedDate = picked);
+
+      final now2 = DateTime.now();
+      final time = _selectedTime ?? const TimeOfDay(hour: 23, minute: 59);
+      final candidate = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute);
+
+      if (!candidate.isAfter(now2)) {
+        setState(() {
+          _selectedTime = TimeOfDay(hour: now2.hour, minute: now2.minute);
+        });
+      }
+    }
+
   }
 
   Future<void> _pickTime() async {
@@ -1274,6 +1312,21 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
           time.hour,
           time.minute,
         );
+      }
+
+      final now = DateTime.now();
+      if (deadline != null && !deadline.isAfter(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '현재 날짜/시간 이후로 마감 기한을 설정해 주세요.',
+              style: GoogleFonts.notoSansKr(fontSize: 13),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        if (mounted) setState(() => _isSaving = false);
+        return;
       }
 
       final updateData = <String, dynamic>{'title': title};
