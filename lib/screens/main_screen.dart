@@ -51,7 +51,7 @@ class _MainScreenState extends State<MainScreen> {
   List<String> _quotes = [];
   static const List<String> _defaultQuotes = [];
   String? _todayQuote;
-  
+
   // 디데이 관련 변수 추가
   bool _dDayEnabled = false;
   String? _dDayTitle;

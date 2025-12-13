@@ -23,52 +23,301 @@ class _TaskListScreenState extends State<TaskListScreen> {
   final Color _backgroundBottom = const Color(0xFF101226);
   final Color _cardBackground = const Color(0xFF262744);
 
+  static const String _prefsSelectedTimetableKey = 'selected_timetable_id';
+
+  bool _loadingTimetables = true;
+  List<Map<String, dynamic>> _timetables = [];
+  String? _selectedTimetableId;
+
+  @override
+  void initState() {
+    super.initState();
+    _initTimetables();
+  }
+
+  Future<void> _initTimetables() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      setState(() => _loadingTimetables = false);
+      return;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_prefsSelectedTimetableKey);
+
+      final snap = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('timetables')
+          .orderBy('createdAt', descending: false)
+          .get();
+
+      final list = snap.docs.map((d) {
+        final data = d.data();
+        data['id'] = d.id;
+        return data;
+      }).toList();
+
+      String? selected;
+      if (list.isNotEmpty) {
+        if (saved != null && list.any((t) => t['id'] == saved)) {
+          selected = saved;
+        } else {
+          selected = list.first['id'] as String;
+          await prefs.setString(_prefsSelectedTimetableKey, selected);
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _timetables = list;
+        _selectedTimetableId = selected;
+        _loadingTimetables = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingTimetables = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('시간표 목록 로딩 오류: $e')),
+      );
+    }
+  }
+
+  Future<void> _selectTimetable(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsSelectedTimetableKey, id);
+    if (!mounted) return;
+    setState(() {
+      _selectedTimetableId = id;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _auth.currentUser;
 
     if (user == null) {
-      return Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [_backgroundTop, _backgroundBottom],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            title: Text(
-              '할 일 목록',
-              style: GoogleFonts.notoSansKr(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          body: Center(
-            child: Text(
-              '로그인이 필요합니다.',
-              style: GoogleFonts.notoSansKr(
-                fontSize: 16,
-                color: Colors.white70,
-              ),
-            ),
+      return _wrapScaffold(
+        title: '할 일 목록',
+        body: Center(
+          child: Text(
+            '로그인이 필요합니다.',
+            style: GoogleFonts.notoSansKr(fontSize: 16, color: Colors.white70),
           ),
         ),
       );
     }
 
+    if (_loadingTimetables) {
+      return _wrapScaffold(
+        title: '할 일 목록',
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_timetables.isEmpty || _selectedTimetableId == null) {
+      return _wrapScaffold(
+        title: '할 일 목록',
+        body: Center(
+          child: Text(
+            '시간표가 없습니다.\n시간표 화면에서 먼저 시간표를 생성해 주세요.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.notoSansKr(fontSize: 14, color: Colors.white54),
+          ),
+        ),
+      );
+    }
+
+    final selected = _timetables.firstWhere(
+          (t) => t['id'] == _selectedTimetableId,
+      orElse: () => _timetables.first,
+    );
+    final selectedName = (selected['name'] ?? '시간표') as String;
+
     final coursesRef = _firestore
         .collection('users')
         .doc(user.uid)
+        .collection('timetables')
+        .doc(_selectedTimetableId)
         .collection('courses')
         .orderBy('day')
         .orderBy('startTime');
 
+    return _wrapScaffold(
+      title: '할 일 목록',
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: _cardBackground,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '선택된 시간표: $selectedName',
+                      style: GoogleFonts.notoSansKr(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedTimetableId,
+                      dropdownColor: const Color(0xFF2D2C59),
+                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                      items: _timetables.map((t) {
+                        return DropdownMenuItem<String>(
+                          value: t['id'] as String,
+                          child: Text(
+                            (t['name'] ?? '시간표') as String,
+                            style: GoogleFonts.notoSansKr(color: Colors.white),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (v) {
+                        if (v == null) return;
+                        _selectTimetable(v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: _cardBackground,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: _primaryColor.withOpacity(0.2),
+                    ),
+                    child: const Icon(Icons.checklist, size: 18, color: Colors.white),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '시간표를 선택한 뒤 강의를 눌러 강의별 할 일을 관리하세요.',
+                      style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white70),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: coursesRef.snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Center(
+                      child: Text(
+                        '등록된 강의가 없습니다.\n선택한 시간표에 강의를 먼저 추가해 주세요.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.notoSansKr(fontSize: 14, color: Colors.white54),
+                      ),
+                    );
+                  }
+
+                  final docs = snapshot.data!.docs;
+
+                  return ListView.separated(
+                    itemCount: docs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      final data = doc.data() as Map<String, dynamic>? ?? {};
+
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CourseTodoScreen(
+                                timetableId: _selectedTimetableId!,
+                                courseId: doc.id,
+                                courseTitle: data['title'] ?? '강의명 없음',
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: _cardBackground,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: Colors.white.withOpacity(0.08),
+                                ),
+                                child: const Icon(Icons.book_outlined, color: Colors.white, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      data['title'] ?? '강의명 없음',
+                                      style: GoogleFonts.notoSansKr(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${data['prof'] ?? '-'} · ${data['room'] ?? '-'}',
+                                      style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white70),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right, color: Colors.white70),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _wrapScaffold({required String title, required Widget body}) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -83,179 +332,24 @@ class _TaskListScreenState extends State<TaskListScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           title: Text(
-            '할 일 목록',
-            style: GoogleFonts.notoSansKr(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+            title,
+            style: GoogleFonts.notoSansKr(fontSize: 18, fontWeight: FontWeight.w700),
           ),
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: _cardBackground,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        color: _primaryColor.withOpacity(0.2),
-                      ),
-                      child: const Icon(
-                        Icons.checklist,
-                        size: 18,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        '강의를 선택해 강의별 할 일을 관리하세요.',
-                        style: GoogleFonts.notoSansKr(
-                          fontSize: 13,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: coursesRef.snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(
-                          child: CircularProgressIndicator());
-                    }
-                    if (!snapshot.hasData ||
-                        snapshot.data!.docs.isEmpty) {
-                      return Center(
-                        child: Text(
-                          '등록된 강의가 없습니다.\n시간표에서 강의를 먼저 추가해 주세요.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.notoSansKr(
-                            fontSize: 14,
-                            color: Colors.white54,
-                          ),
-                        ),
-                      );
-                    }
-
-                    final docs = snapshot.data!.docs;
-
-                    return ListView.separated(
-                      itemCount: docs.length,
-                      separatorBuilder: (_, __) =>
-                      const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final doc = docs[index];
-                        final data =
-                            doc.data() as Map<String, dynamic>? ?? {};
-
-                        return GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => CourseTodoScreen(
-                                  courseId: doc.id,
-                                  courseTitle:
-                                  data['title'] ?? '강의명 없음',
-                                ),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: _cardBackground,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 34,
-                                  height: 34,
-                                  decoration: BoxDecoration(
-                                    borderRadius:
-                                    BorderRadius.circular(12),
-                                    color: Colors.white.withOpacity(0.08),
-                                  ),
-                                  child: const Icon(
-                                    Icons.book_outlined,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        data['title'] ?? '강의명 없음',
-                                        style: GoogleFonts.notoSansKr(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${data['prof'] ?? '-'} · ${data['room'] ?? '-'}',
-                                        style: GoogleFonts.notoSansKr(
-                                          fontSize: 12,
-                                          color: Colors.white70,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.white70,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
+        body: body,
       ),
     );
   }
 }
 
-// ----------------------------------------
-// 강의별 할 일 목록 화면
-// ----------------------------------------
-
 class CourseTodoScreen extends StatefulWidget {
+  final String timetableId;
   final String courseId;
   final String courseTitle;
 
   const CourseTodoScreen({
     super.key,
+    required this.timetableId,
     required this.courseId,
     required this.courseTitle,
   });
@@ -284,7 +378,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
   Future<void> _loadFeatureFlags() async {
     final prefs = await SharedPreferences.getInstance();
     final owned = prefs.getStringList('ownedStoreItems') ?? [];
-
+    if (!mounted) return;
     setState(() {
       _confettiEnabled = owned.contains('feature_confetti');
     });
@@ -294,6 +388,8 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
     return _firestore
         .collection('users')
         .doc(user.uid)
+        .collection('timetables')
+        .doc(widget.timetableId)
         .collection('courses')
         .doc(widget.courseId)
         .collection('tasks');
@@ -326,8 +422,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
       context: context,
       builder: (context) {
         return Dialog(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -337,11 +432,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.celebration,
-                  size: 48,
-                  color: Color(0xFFFFD54F),
-                ),
+                const Icon(Icons.celebration, size: 48, color: Color(0xFFFFD54F)),
                 const SizedBox(height: 16),
                 Text(
                   '축하합니다!',
@@ -355,23 +446,15 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                 Text(
                   '\'$title\' 할 일을 완료했어요.\n수고했어요 👏',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(
-                    fontSize: 14,
-                    color: Colors.white70,
-                  ),
+                  style: GoogleFonts.notoSansKr(fontSize: 14, color: Colors.white70),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 10,
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                   ),
                   child: Text(
                     '닫기',
@@ -397,8 +480,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
       context: context,
       builder: (context) {
         return Dialog(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -408,11 +490,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.delete_forever,
-                  size: 48,
-                  color: Colors.redAccent,
-                ),
+                const Icon(Icons.delete_forever, size: 48, color: Colors.redAccent),
                 const SizedBox(height: 16),
                 Text(
                   '삭제하시겠습니까?',
@@ -425,10 +503,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                 const SizedBox(height: 8),
                 Text(
                   '삭제한 할 일은 복구할 수 없습니다.',
-                  style: GoogleFonts.notoSansKr(
-                    fontSize: 13,
-                    color: Colors.white60,
-                  ),
+                  style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white60),
                 ),
                 const SizedBox(height: 24),
                 Row(
@@ -436,36 +511,19 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 10,
-                        ),
-                      ),
-                      child: Text(
-                        '취소',
-                        style: GoogleFonts.notoSansKr(
-                          color: Colors.white70,
-                        ),
-                      ),
+                      child: Text('취소', style: GoogleFonts.notoSansKr(color: Colors.white70)),
                     ),
                     const SizedBox(width: 16),
                     ElevatedButton(
                       onPressed: () async {
                         Navigator.pop(context);
                         await _tasksRef(user).doc(doc.id).delete();
-                        await NotificationService
-                            .cancelDeadlineNotification(doc.id);
+                        await NotificationService.cancelDeadlineNotification(doc.id);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 10,
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                       ),
                       child: Text(
                         '삭제',
@@ -490,6 +548,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => EditTaskScreen(
+          timetableId: widget.timetableId,
           courseId: widget.courseId,
           courseTitle: widget.courseTitle,
           taskDoc: doc,
@@ -516,10 +575,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
         appBar: AppBar(
           title: Text(
             widget.courseTitle,
-            style: GoogleFonts.notoSansKr(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+            style: GoogleFonts.notoSansKr(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -530,6 +586,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
               context,
               MaterialPageRoute(
                 builder: (context) => AddTaskScreen(
+                  timetableId: widget.timetableId,
                   courseId: widget.courseId,
                   courseTitle: widget.courseTitle,
                 ),
@@ -551,8 +608,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
-                    return const Center(
-                        child: CircularProgressIndicator());
+                    return const Center(child: CircularProgressIndicator());
                   }
                   final docs = snapshot.data!.docs;
                   if (docs.isEmpty) {
@@ -560,20 +616,15 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                       child: Text(
                         '등록된 할 일이 없습니다.\n오른쪽 아래 + 버튼을 눌러 추가해보세요.',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.notoSansKr(
-                          fontSize: 14,
-                          color: Colors.white54,
-                        ),
+                        style: GoogleFonts.notoSansKr(fontSize: 14, color: Colors.white54),
                       ),
                     );
                   }
 
                   return ListView.separated(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     itemCount: docs.length,
-                    separatorBuilder: (_, __) =>
-                    const SizedBox(height: 8),
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final doc = docs[index];
                       final data = doc.data();
@@ -581,13 +632,11 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                       final isDone = data['isDone'] ?? false;
                       DateTime? deadline;
                       if (data['deadline'] is Timestamp) {
-                        deadline =
-                            (data['deadline'] as Timestamp).toDate();
+                        deadline = (data['deadline'] as Timestamp).toDate();
                       }
 
                       return Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         decoration: BoxDecoration(
                           color: _cardBackground,
                           borderRadius: BorderRadius.circular(14),
@@ -601,10 +650,8 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                                 value: isDone,
                                 activeColor: _primaryColor,
                                 shape: const CircleBorder(),
-                                side: const BorderSide(
-                                    color: Colors.white54),
-                                onChanged: (_) =>
-                                    _toggleDone(user, doc),
+                                side: const BorderSide(color: Colors.white54),
+                                onChanged: (_) => _toggleDone(user, doc),
                               ),
                             ),
                             const SizedBox(width: 4),
@@ -612,8 +659,7 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                               child: InkWell(
                                 onTap: () => _navigateToEdit(doc),
                                 child: Column(
-                                  crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       title,
@@ -621,27 +667,18 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                                         fontSize: 15,
                                         fontWeight: FontWeight.w600,
                                         color: Colors.white,
-                                        decoration: isDone
-                                            ? TextDecoration.lineThrough
-                                            : TextDecoration.none,
+                                        decoration: isDone ? TextDecoration.lineThrough : TextDecoration.none,
                                       ),
                                     ),
                                     if (deadline != null) ...[
                                       const SizedBox(height: 4),
                                       Row(
                                         children: [
-                                          const Icon(
-                                            Icons.calendar_today,
-                                            size: 12,
-                                            color: Colors.white70,
-                                          ),
+                                          const Icon(Icons.calendar_today, size: 12, color: Colors.white70),
                                           const SizedBox(width: 4),
                                           Text(
                                             _formatDeadline(deadline),
-                                            style: GoogleFonts.notoSansKr(
-                                              fontSize: 11,
-                                              color: Colors.white70,
-                                            ),
+                                            style: GoogleFonts.notoSansKr(fontSize: 11, color: Colors.white70),
                                           ),
                                         ],
                                       ),
@@ -651,12 +688,9 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                               ),
                             ),
                             PopupMenuButton<String>(
-                              icon: const Icon(Icons.more_vert,
-                                  color: Colors.white70),
+                              icon: const Icon(Icons.more_vert, color: Colors.white70),
                               color: _cardBackground,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               onSelected: (value) {
                                 if (value == 'edit') {
                                   _navigateToEdit(doc);
@@ -669,16 +703,11 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                                   value: 'edit',
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.edit,
-                                          size: 18,
-                                          color: Colors.white),
+                                      const Icon(Icons.edit, size: 18, color: Colors.white),
                                       const SizedBox(width: 8),
                                       Text(
                                         '수정하기',
-                                        style: GoogleFonts.notoSansKr(
-                                          color: Colors.white,
-                                          fontSize: 13,
-                                        ),
+                                        style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 13),
                                       ),
                                     ],
                                   ),
@@ -687,16 +716,11 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
                                   value: 'delete',
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.delete,
-                                          size: 18,
-                                          color: Colors.redAccent),
+                                      const Icon(Icons.delete, size: 18, color: Colors.redAccent),
                                       const SizedBox(width: 8),
                                       Text(
                                         '삭제하기',
-                                        style: GoogleFonts.notoSansKr(
-                                          color: Colors.redAccent,
-                                          fontSize: 13,
-                                        ),
+                                        style: GoogleFonts.notoSansKr(color: Colors.redAccent, fontSize: 13),
                                       ),
                                     ],
                                   ),
@@ -718,16 +742,14 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
   }
 }
 
-// ----------------------------------------
-// 할 일 추가 화면
-// ----------------------------------------
-
 class AddTaskScreen extends StatefulWidget {
+  final String timetableId;
   final String courseId;
   final String courseTitle;
 
   const AddTaskScreen({
     super.key,
+    required this.timetableId,
     required this.courseId,
     required this.courseTitle,
   });
@@ -755,7 +777,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? now,
-      firstDate: DateTime(now.year - 1),
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: DateTime(now.year + 5),
       builder: (context, child) {
         return Theme(
@@ -770,14 +792,25 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         );
       },
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked != null) { // 오늘 날짜를 골랐는데 시간이 과거로 남아있는 경우
+      setState(() => _selectedDate = picked);
+
+      final now2 = DateTime.now();
+      final time = _selectedTime ?? const TimeOfDay(hour: 23, minute: 59);
+      final candidate = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute);
+
+      if (!candidate.isAfter(now2)) {
+        setState(() {
+          _selectedTime = TimeOfDay(hour: now2.hour, minute: now2.minute);
+        });
+      }
+    }
   }
 
   Future<void> _pickTime() async {
     final initTime = _selectedTime ?? TimeOfDay.now();
     final now = DateTime.now();
-    final initialDateTime =
-    DateTime(now.year, now.month, now.day, initTime.hour, initTime.minute);
+    final initialDateTime = DateTime(now.year, now.month, now.day, initTime.hour, initTime.minute);
 
     await showModalBottomSheet(
       context: context,
@@ -791,12 +824,10 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           child: Column(
             children: [
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: const BoxDecoration(
                   color: Color(0xFF25254A),
-                  borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -805,10 +836,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                       onPressed: () => Navigator.pop(context),
                       child: Text(
                         '완료',
-                        style: GoogleFonts.notoSansKr(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
@@ -816,18 +844,14 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
               ),
               Expanded(
                 child: CupertinoTheme(
-                  data:
-                  const CupertinoThemeData(brightness: Brightness.dark),
+                  data: const CupertinoThemeData(brightness: Brightness.dark),
                   child: CupertinoDatePicker(
                     mode: CupertinoDatePickerMode.time,
                     initialDateTime: initialDateTime,
                     use24hFormat: false,
                     onDateTimeChanged: (newDate) {
                       setState(() {
-                        _selectedTime = TimeOfDay(
-                          hour: newDate.hour,
-                          minute: newDate.minute,
-                        );
+                        _selectedTime = TimeOfDay(hour: newDate.hour, minute: newDate.minute);
                       });
                     },
                   ),
@@ -842,19 +866,14 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
   Future<void> _saveTask() async {
     final title = _contentController.text.trim();
-    if (title.isEmpty) {
-      // 내용이 비어 있을 때는 그냥 리턴 (원래 로직 유지)
-      return;
-    }
+    if (title.isEmpty) return;
 
     if (_selectedDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             '마감 기한을 선택해 주세요.',
-            style: GoogleFonts.notoSansKr(
-              fontSize: 13,
-            ),
+            style: GoogleFonts.notoSansKr(fontSize: 13),
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -867,15 +886,27 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     setState(() => _isSaving = true);
 
     try {
-      DateTime? deadline;
       final time = _selectedTime ?? const TimeOfDay(hour: 23, minute: 59);
-      deadline = DateTime(
+      final deadline = DateTime(
         _selectedDate!.year,
         _selectedDate!.month,
         _selectedDate!.day,
         time.hour,
         time.minute,
       );
+
+      final now = DateTime.now();
+      if (!deadline.isAfter(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('현재 날짜/시간 이후로 마감 기한을 설정해 주세요.',
+                style: GoogleFonts.notoSansKr(fontSize: 13)),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
 
       final data = <String, dynamic>{
         'title': title,
@@ -887,6 +918,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       final ref = await _firestore
           .collection('users')
           .doc(user.uid)
+          .collection('timetables')
+          .doc(widget.timetableId)
           .collection('courses')
           .doc(widget.courseId)
           .collection('tasks')
@@ -901,12 +934,10 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      // 필요하면 에러 처리 로그 추가 가능
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -930,10 +961,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
         appBar: AppBar(
           title: Text(
             '할 일 추가',
-            style: GoogleFonts.notoSansKr(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+            style: GoogleFonts.notoSansKr(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -951,8 +979,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.list,
-                        color: Colors.white, size: 20),
+                    const Icon(Icons.list, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       '할 일 정보',
@@ -965,26 +992,14 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  '내용',
-                  style: GoogleFonts.notoSansKr(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
-                ),
+                Text('내용', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _contentController,
-                  style: GoogleFonts.notoSansKr(
-                    color: Colors.white,
-                    fontSize: 14,
-                  ),
+                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: '할 일을 입력하세요.',
-                    hintStyle: GoogleFonts.notoSansKr(
-                      color: Colors.white38,
-                      fontSize: 13,
-                    ),
+                    hintStyle: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 13),
                     filled: true,
                     fillColor: _fieldBackground,
                     border: OutlineInputBorder(
@@ -1004,8 +1019,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                 const SizedBox(height: 24),
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today,
-                        color: Colors.white, size: 20),
+                    const Icon(Icons.calendar_today, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       '마감 기한',
@@ -1018,13 +1032,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  '날짜 및 시간',
-                  style: GoogleFonts.notoSansKr(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
-                ),
+                Text('날짜 및 시간', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -1033,22 +1041,18 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                         onTap: _pickDate,
                         child: Container(
                           height: 48,
-                          padding:
-                          const EdgeInsets.symmetric(horizontal: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
                             color: _fieldBackground,
                             borderRadius: BorderRadius.circular(14),
-                            border:
-                            Border.all(color: Colors.white10),
+                            border: Border.all(color: Colors.white10),
                           ),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
                               dateStr,
                               style: GoogleFonts.notoSansKr(
-                                color: _selectedDate == null
-                                    ? Colors.white38
-                                    : Colors.white,
+                                color: _selectedDate == null ? Colors.white38 : Colors.white,
                                 fontSize: 14,
                               ),
                             ),
@@ -1062,22 +1066,18 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                         onTap: _pickTime,
                         child: Container(
                           height: 48,
-                          padding:
-                          const EdgeInsets.symmetric(horizontal: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
                             color: _fieldBackground,
                             borderRadius: BorderRadius.circular(14),
-                            border:
-                            Border.all(color: Colors.white10),
+                            border: Border.all(color: Colors.white10),
                           ),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
                               timeStr,
                               style: GoogleFonts.notoSansKr(
-                                color: _selectedTime == null
-                                    ? Colors.white38
-                                    : Colors.white,
+                                color: _selectedTime == null ? Colors.white38 : Colors.white,
                                 fontSize: 14,
                               ),
                             ),
@@ -1090,8 +1090,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                 const SizedBox(height: 24),
                 Row(
                   children: [
-                    const Icon(Icons.book,
-                        color: Colors.white, size: 20),
+                    const Icon(Icons.book, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       '강의 연동',
@@ -1104,18 +1103,11 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  '강의 선택',
-                  style: GoogleFonts.notoSansKr(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
-                ),
+                Text('강의 선택', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   decoration: BoxDecoration(
                     color: _fieldBackground,
                     borderRadius: BorderRadius.circular(14),
@@ -1123,10 +1115,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                   ),
                   child: Text(
                     widget.courseTitle,
-                    style: GoogleFonts.notoSansKr(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
+                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -1138,18 +1127,13 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _primaryColor,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
                     child: _isSaving
                         ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                     )
                         : Text(
                       '추가하기',
@@ -1170,17 +1154,15 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   }
 }
 
-// ----------------------------------------
-// 할 일 수정 화면
-// ----------------------------------------
-
 class EditTaskScreen extends StatefulWidget {
+  final String timetableId;
   final String courseId;
   final String courseTitle;
   final DocumentSnapshot<Map<String, dynamic>> taskDoc;
 
   const EditTaskScreen({
     super.key,
+    required this.timetableId,
     required this.courseId,
     required this.courseTitle,
     required this.taskDoc,
@@ -1209,8 +1191,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
   void initState() {
     super.initState();
     final data = widget.taskDoc.data()!;
-    _contentController =
-        TextEditingController(text: data['title'] as String? ?? '');
+    _contentController = TextEditingController(text: data['title'] as String? ?? '');
 
     if (data['deadline'] != null && data['deadline'] is Timestamp) {
       final dt = (data['deadline'] as Timestamp).toDate();
@@ -1224,7 +1205,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? now,
-      firstDate: DateTime(now.year - 1),
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: DateTime(now.year + 5),
       builder: (context, child) {
         return Theme(
@@ -1239,14 +1220,26 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
         );
       },
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked != null) { // 오늘 날짜를 골랐는데 시간이 과거로 남아있는 경우
+      setState(() => _selectedDate = picked);
+
+      final now2 = DateTime.now();
+      final time = _selectedTime ?? const TimeOfDay(hour: 23, minute: 59);
+      final candidate = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute);
+
+      if (!candidate.isAfter(now2)) {
+        setState(() {
+          _selectedTime = TimeOfDay(hour: now2.hour, minute: now2.minute);
+        });
+      }
+    }
+
   }
 
   Future<void> _pickTime() async {
     final initTime = _selectedTime ?? TimeOfDay.now();
     final now = DateTime.now();
-    final initialDateTime =
-    DateTime(now.year, now.month, now.day, initTime.hour, initTime.minute);
+    final initialDateTime = DateTime(now.year, now.month, now.day, initTime.hour, initTime.minute);
 
     await showModalBottomSheet(
       context: context,
@@ -1260,12 +1253,10 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
           child: Column(
             children: [
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: const BoxDecoration(
                   color: Color(0xFF25254A),
-                  borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -1274,10 +1265,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                       onPressed: () => Navigator.pop(context),
                       child: Text(
                         '완료',
-                        style: GoogleFonts.notoSansKr(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: GoogleFonts.notoSansKr(color: Colors.white, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
@@ -1285,18 +1273,14 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
               ),
               Expanded(
                 child: CupertinoTheme(
-                  data:
-                  const CupertinoThemeData(brightness: Brightness.dark),
+                  data: const CupertinoThemeData(brightness: Brightness.dark),
                   child: CupertinoDatePicker(
                     mode: CupertinoDatePickerMode.time,
                     initialDateTime: initialDateTime,
                     use24hFormat: false,
                     onDateTimeChanged: (newDate) {
                       setState(() {
-                        _selectedTime = TimeOfDay(
-                          hour: newDate.hour,
-                          minute: newDate.minute,
-                        );
+                        _selectedTime = TimeOfDay(hour: newDate.hour, minute: newDate.minute);
                       });
                     },
                   ),
@@ -1330,21 +1314,36 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
         );
       }
 
+      final now = DateTime.now();
+      if (deadline != null && !deadline.isAfter(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '현재 날짜/시간 이후로 마감 기한을 설정해 주세요.',
+              style: GoogleFonts.notoSansKr(fontSize: 13),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
+
       final updateData = <String, dynamic>{'title': title};
-      updateData['deadline'] =
-      deadline != null ? Timestamp.fromDate(deadline) : null;
+      updateData['deadline'] = deadline != null ? Timestamp.fromDate(deadline) : null;
 
       await _firestore
           .collection('users')
           .doc(user.uid)
+          .collection('timetables')
+          .doc(widget.timetableId)
           .collection('courses')
           .doc(widget.courseId)
           .collection('tasks')
           .doc(widget.taskDoc.id)
           .update(updateData);
 
-      await NotificationService.cancelDeadlineNotification(
-          widget.taskDoc.id);
+      await NotificationService.cancelDeadlineNotification(widget.taskDoc.id);
       if (deadline != null) {
         await NotificationService.scheduleDeadlineNotification(
           notificationId: widget.taskDoc.id,
@@ -1353,6 +1352,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
           deadline: deadline,
         );
       }
+
       if (mounted) Navigator.pop(context);
     } catch (e) {
     } finally {
@@ -1382,10 +1382,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
         appBar: AppBar(
           title: Text(
             '할 일 수정',
-            style: GoogleFonts.notoSansKr(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+            style: GoogleFonts.notoSansKr(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -1403,8 +1400,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.list,
-                        color: Colors.white, size: 20),
+                    const Icon(Icons.list, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       '할 일 정보',
@@ -1417,26 +1413,14 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  '내용',
-                  style: GoogleFonts.notoSansKr(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
-                ),
+                Text('내용', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _contentController,
-                  style: GoogleFonts.notoSansKr(
-                    color: Colors.white,
-                    fontSize: 14,
-                  ),
+                  style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: '할 일을 입력하세요.',
-                    hintStyle: GoogleFonts.notoSansKr(
-                      color: Colors.white38,
-                      fontSize: 13,
-                    ),
+                    hintStyle: GoogleFonts.notoSansKr(color: Colors.white38, fontSize: 13),
                     filled: true,
                     fillColor: _fieldBackground,
                     border: OutlineInputBorder(
@@ -1456,8 +1440,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                 const SizedBox(height: 24),
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today,
-                        color: Colors.white, size: 20),
+                    const Icon(Icons.calendar_today, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       '마감 기한',
@@ -1470,13 +1453,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  '날짜 및 시간',
-                  style: GoogleFonts.notoSansKr(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
-                ),
+                Text('날짜 및 시간', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -1485,22 +1462,18 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                         onTap: _pickDate,
                         child: Container(
                           height: 48,
-                          padding:
-                          const EdgeInsets.symmetric(horizontal: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
                             color: _fieldBackground,
                             borderRadius: BorderRadius.circular(14),
-                            border:
-                            Border.all(color: Colors.white10),
+                            border: Border.all(color: Colors.white10),
                           ),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
                               dateStr,
                               style: GoogleFonts.notoSansKr(
-                                color: _selectedDate == null
-                                    ? Colors.white38
-                                    : Colors.white,
+                                color: _selectedDate == null ? Colors.white38 : Colors.white,
                                 fontSize: 14,
                               ),
                             ),
@@ -1514,22 +1487,18 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                         onTap: _pickTime,
                         child: Container(
                           height: 48,
-                          padding:
-                          const EdgeInsets.symmetric(horizontal: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
                             color: _fieldBackground,
                             borderRadius: BorderRadius.circular(14),
-                            border:
-                            Border.all(color: Colors.white10),
+                            border: Border.all(color: Colors.white10),
                           ),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
                               timeStr,
                               style: GoogleFonts.notoSansKr(
-                                color: _selectedTime == null
-                                    ? Colors.white38
-                                    : Colors.white,
+                                color: _selectedTime == null ? Colors.white38 : Colors.white,
                                 fontSize: 14,
                               ),
                             ),
@@ -1542,8 +1511,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                 const SizedBox(height: 24),
                 Row(
                   children: [
-                    const Icon(Icons.book,
-                        color: Colors.white, size: 20),
+                    const Icon(Icons.book, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       '강의 연동',
@@ -1556,18 +1524,11 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  '강의 선택',
-                  style: GoogleFonts.notoSansKr(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
-                ),
+                Text('강의 선택', style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   decoration: BoxDecoration(
                     color: _fieldBackground,
                     borderRadius: BorderRadius.circular(14),
@@ -1575,10 +1536,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                   ),
                   child: Text(
                     widget.courseTitle,
-                    style: GoogleFonts.notoSansKr(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
+                    style: GoogleFonts.notoSansKr(color: Colors.white70, fontSize: 14),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -1590,18 +1548,13 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _primaryColor,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
                     child: _isSaving
                         ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                     )
                         : Text(
                       '수정 완료',

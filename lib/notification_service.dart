@@ -7,7 +7,6 @@ class NotificationService {
   FlutterLocalNotificationsPlugin();
 
   static Future<void> init() async {
-    // 타임존 초기화
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Seoul'));
 
@@ -20,21 +19,41 @@ class NotificationService {
     );
 
     await _plugin.initialize(initSettings);
+
+    const channel = AndroidNotificationChannel(
+      'task_deadline_channel',
+      '할 일 마감 알림',
+      description: '강의별 투두리스트 마감 기한 알림',
+      importance: Importance.max,
+    );
+
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
   }
 
-  /// 마감 기한 알림 예약
+  /// 마감 하루 전 알림 예약
   static Future<void> scheduleDeadlineNotification({
-    required String notificationId, // task docId 사용
+    required String notificationId,
     required String courseTitle,
     required String taskTitle,
     required DateTime deadline,
   }) async {
     final now = DateTime.now();
-    if (!deadline.isAfter(now)) return; // 이미 지난 시간이면 안 보냄
+
+    // 마감 자체가 과거면 예약 불가
+    if (!deadline.isAfter(now)) return;
+
+    // "하루 전" 알림 시각
+    final notifyAt = deadline.subtract(const Duration(days: 1));
+
+    // 하루 전 시간이 이미 지났으면 예약 안 함
+    if (!notifyAt.isAfter(now)) return;
 
     final id = notificationId.hashCode & 0x7fffffff;
 
-    final androidDetails = const AndroidNotificationDetails(
+    const androidDetails = AndroidNotificationDetails(
       'task_deadline_channel',
       '할 일 마감 알림',
       channelDescription: '강의별 투두리스트 마감 기한 알림',
@@ -49,12 +68,12 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    final tzDateTime = tz.TZDateTime.from(deadline, tz.local);
+    final tzDateTime = tz.TZDateTime.from(notifyAt, tz.local);
 
     await _plugin.zonedSchedule(
       id,
-      '[$courseTitle] 마감 알림',
-      '$taskTitle 마감 시간이 되었습니다.',
+      '[$courseTitle] 마감 하루 전 알림',
+      '내일 마감: $taskTitle',
       tzDateTime,
       details,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -65,7 +84,6 @@ class NotificationService {
     );
   }
 
-  /// 해당 task 에 대한 알림 취소
   static Future<void> cancelDeadlineNotification(String notificationId) async {
     final id = notificationId.hashCode & 0x7fffffff;
     await _plugin.cancel(id);
