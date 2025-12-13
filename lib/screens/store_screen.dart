@@ -185,6 +185,14 @@ class _StoreScreenState extends State<StoreScreen> {
         icon: Icons.celebration,
       ),
       StoreItem(
+        id: 'feature_dday',
+        title: 'D-Day 위젯',
+        description: '중요한 일정을 메인 화면에서 카운트다운하세요.',
+        cost: 30,
+        category: StoreCategory.feature,
+        icon: Icons.timer,
+      ),
+      StoreItem(
         id: 'feature_daily_quote',
         title: '오늘의 문장 위젯',
         description: '메인 화면 상단에 동기부여 문장을 띄워줍니다.',

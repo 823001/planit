@@ -19,6 +19,21 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
+class _DueSoonItem {
+  final String timetableName;
+  final String courseTitle;
+  final String taskTitle;
+  final DateTime deadline;
+
+  _DueSoonItem({
+    required this.timetableName,
+    required this.courseTitle,
+    required this.taskTitle,
+    required this.deadline,
+  });
+}
+
+
 class _MainScreenState extends State<MainScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _points = 0;
@@ -33,22 +48,28 @@ class _MainScreenState extends State<MainScreen> {
 
   bool _dailyQuoteEnabled = false;
 
-  // Firestore에서 읽어올 실제 명언 리스트
   List<String> _quotes = [];
   static const List<String> _defaultQuotes = [];
-  // 오늘 한 번만 뽑아서 쓰는 문장
   String? _todayQuote;
+  
+  // 디데이 관련 변수 추가
+  bool _dDayEnabled = false;
+  String? _dDayTitle;
+  DateTime? _dDayDate;
 
-  // 공통 컬러/테마
   final Color _primaryColor = const Color(0xFF6768F0);
   final Color _backgroundTop = const Color(0xFF191C3D);
   final Color _backgroundBottom = const Color(0xFF101226);
-  final Color _cardBackground = const Color(0xFF262744); // 어두운 카드
-  final Color _textPrimary = Colors.white; // 카드 안 메인 텍스트
-  final Color _textSecondary = Colors.white70; // 카드 안 서브 텍스트
+  final Color _cardBackground = const Color(0xFF262744);
+  final Color _textPrimary = Colors.white;
+  final Color _textSecondary = Colors.white70;
 
   static const String _quotePrefsDateKey = 'daily_quote_date';
   static const String _quotePrefsTextKey = 'daily_quote_text';
+
+  static const String _prefsSelectedTimetableKey = 'selected_timetable_id';
+
+  List<_DueSoonItem> _dueSoon = [];
 
   @override
   void initState() {
@@ -57,8 +78,128 @@ class _MainScreenState extends State<MainScreen> {
     _refreshData();
   }
 
-  // Firestore에서 명언 리스트 가져오기
-  // 경로: meta/quotes 문서, 필드: list (array<string>)
+  Future<void> _loadDDayData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState((){
+      _dDayTitle = prefs.getString('dday_title');
+      final dateStr = prefs.getString('dday_date');
+      if(dateStr != null){
+        _dDayDate = DateTime.parse(dateStr);
+      }
+    });
+  }
+
+  Future<void> _showDDaySettingDialog() async {
+    final titleController = TextEditingController(text: _dDayTitle ?? '');
+    DateTime selectedDate = _dDayDate ?? DateTime.now();
+
+    await showDialog(
+     context: context,
+     builder: (context) {
+       return AlertDialog(
+         backgroundColor: _cardBackground,
+         title: Text(
+           'D-Day 설정',
+           style: TextStyle(
+             color: _textPrimary
+           )
+         ),
+         content: SingleChildScrollView(
+           child: Column(
+             mainAxisSize: MainAxisSize.min,
+             children: [
+               TextField(
+                 controller: titleController,
+                 style: TextStyle(
+                   color: _textPrimary
+                 ),
+                 decoration: InputDecoration(
+                   hintText: '일정 이름',
+                   hintStyle: TextStyle(
+                     color: Colors.white38
+                   ),
+                   enabledBorder:
+                     const UnderlineInputBorder(
+                       borderSide: BorderSide(
+                         color: Colors.white24
+                       )
+                     ),
+                   focusedBorder: UnderlineInputBorder(
+                     borderSide: BorderSide(
+                       color: _primaryColor
+                     )
+                   ),
+                 ),
+               ),
+               const SizedBox(height:20),
+               SizedBox(
+                 height: 350,
+                 width: double.maxFinite,
+                 child: Theme(
+                   data: Theme.of(context).copyWith(
+                     colorScheme: ColorScheme.dark(
+                       primary: _primaryColor,
+                       onPrimary: Colors.white,
+                       surface: _cardBackground,
+                       onSurface: Colors.white,
+                     ),
+                   ),
+                   child: CalendarDatePicker(
+                     initialDate: selectedDate,
+                     firstDate: DateTime.now().subtract(
+                       const Duration(days:365)
+                     ),
+                     lastDate: DateTime.now().add(
+                       const Duration(days: 365*2)
+                     ),
+                     onDateChanged: (date) => selectedDate = date,
+                   ),
+                 ),
+               ),
+             ],
+           ),
+         ),
+         actions: [
+           TextButton(
+             onPressed: () => Navigator.pop(context),
+             child: const Text(
+               '취소',
+               style: TextStyle(
+                 color: Colors.white60
+               )
+             ),
+           ),
+           TextButton(
+             onPressed: () async {
+               final prefs = await SharedPreferences.getInstance();
+               await prefs.setString(
+                   'dday_title',
+                   titleController.text
+               );
+               await prefs.setString(
+                   'dday_date',
+                   selectedDate.toIso8601String()
+               );
+               setState((){
+                 _dDayTitle = titleController.text;
+                 _dDayDate = selectedDate;
+               });
+               Navigator.pop(context);
+             },
+             child: Text(
+               '저장',
+               style: TextStyle(
+                 color: _primaryColor,
+                 fontWeight: FontWeight.bold
+               )
+             ),
+           ),
+         ],
+       );
+     },
+    );
+  }
+
   Future<void> _loadQuotesFromFirestore() async {
     try {
       final doc = await _firestore.collection('meta').doc('quotes').get();
@@ -79,20 +220,15 @@ class _MainScreenState extends State<MainScreen> {
         }
       }
 
-      // 명언이 하나도 없는 경우 → 오늘의 문장 기능 비활성화
       setState(() {
         _quotes = [];
       });
-
     } catch (e) {
       print('오늘의 문구 Firestore 로드 오류: $e');
-
-      // 오류 시에도 기능을 켜지 않도록 empty 유지
       if (mounted) setState(() => _quotes = []);
     }
   }
 
-  // 오늘의 문구 한 번만 선택 (SharedPreferences에 오늘 날짜 기준으로 캐싱)
   Future<void> _initTodayQuote() async {
     if (_quotes.isEmpty) {
       setState(() {
@@ -108,13 +244,11 @@ class _MainScreenState extends State<MainScreen> {
     final savedDate = prefs.getString(_quotePrefsDateKey);
     final savedQuote = prefs.getString(_quotePrefsTextKey);
 
-    if (savedDate == todayStr &&
-        savedQuote != null &&
-        _quotes.contains(savedQuote)) {
+    if (savedDate == todayStr && savedQuote != null && _quotes.contains(savedQuote)) {
       setState(() => _todayQuote = savedQuote);
       return;
     }
-    // 새로 뽑기
+
     final newQuote = (_quotes..shuffle()).first;
 
     await prefs.setString(_quotePrefsDateKey, todayStr);
@@ -123,8 +257,6 @@ class _MainScreenState extends State<MainScreen> {
     setState(() => _todayQuote = newQuote);
   }
 
-  // 상점에서 산 기능 정보 로드
-  // feature_daily_quote 가지고 있으면 명언 로드 + 오늘 문장 뽑기까지 같이 처리
   Future<void> _loadStoreFeatures() async {
     final prefs = await SharedPreferences.getInstance();
     final owned = prefs.getStringList('ownedStoreItems') ?? [];
@@ -136,21 +268,24 @@ class _MainScreenState extends State<MainScreen> {
     });
 
     if (enabled) {
-      // 오늘의 문구 아이템을 산 경우에만 명언 로드 후 명언 선택
       await _loadQuotesFromFirestore();
       await _initTodayQuote();
     } else {
-      // 기능을 안 샀으면 명언 비움
       setState(() {
         _todayQuote = null;
       });
     }
+
+    final dDayEnabled = owned.contains('feature_dday');
+    setState(() => _dDayEnabled = dDayEnabled);
+    if (dDayEnabled) _loadDDayData();
   }
 
   Future<void> _refreshData() async {
     await _loadPoints();
     await _loadTaskStats();
     await _loadAttendanceStats();
+    await _loadDueSoonTasks();
   }
 
   Future<void> _loadPoints() async {
@@ -276,6 +411,81 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  Future<void> _loadDueSoonTasks() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _dueSoon = []);
+      return;
+    }
+
+    final now = DateTime.now();
+    final end = now.add(const Duration(hours: 24));
+
+    try {
+      final timetablesSnap = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('timetables')
+          .get();
+
+      final List<_DueSoonItem> items = [];
+
+      for (final tt in timetablesSnap.docs) {
+        final timetableId = tt.id;
+        final ttData = tt.data();
+        final timetableName = (ttData['name'] ?? '시간표') as String;
+
+        final coursesSnap = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('timetables')
+            .doc(timetableId)
+            .collection('courses')
+            .get();
+
+        for (final c in coursesSnap.docs) {
+          final cData = c.data();
+          final courseTitle = (cData['title'] ?? '강의명 없음') as String;
+
+          final tasksSnap = await c.reference
+              .collection('tasks')
+              .where('isDone', isEqualTo: false)
+              .where('deadline', isGreaterThan: Timestamp.fromDate(now))
+              .where('deadline', isLessThanOrEqualTo: Timestamp.fromDate(end))
+              .orderBy('deadline', descending: false)
+              .get();
+
+          for (final t in tasksSnap.docs) {
+            final tData = t.data();
+            final taskTitle = (tData['title'] ?? '제목 없음') as String;
+
+            DateTime? deadline;
+            if (tData['deadline'] is Timestamp) {
+              deadline = (tData['deadline'] as Timestamp).toDate();
+            }
+            if (deadline == null) continue;
+
+            items.add(_DueSoonItem(
+              timetableName: timetableName,
+              courseTitle: courseTitle,
+              taskTitle: taskTitle,
+              deadline: deadline,
+            ));
+          }
+        }
+      }
+
+
+      items.sort((a, b) => a.deadline.compareTo(b.deadline));
+
+      if (mounted) setState(() => _dueSoon = items);
+    } catch (e) {
+      debugPrint('🔥 loadDueSoonTasks error: $e');
+      if (mounted) setState(() => _dueSoon = []);
+    }
+  }
+
+
   void _showExitDialog() {
     showDialog(
       context: context,
@@ -337,13 +547,11 @@ class _MainScreenState extends State<MainScreen> {
                           }
                         },
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                              color: _primaryColor.withOpacity(0.4)),
+                          side: BorderSide(color: _primaryColor.withOpacity(0.4)),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          padding:
-                          const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                         child: Text(
                           '로그아웃',
@@ -368,8 +576,7 @@ class _MainScreenState extends State<MainScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          padding:
-                          const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           elevation: 0,
                         ),
                         child: Text(
@@ -392,7 +599,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildDailyQuoteCard() {
-    // 기능을 안 샀거나, 아직 오늘 문구가 없는 경우 -> 안 보여줌
     if (!_dailyQuoteEnabled || _todayQuote == null) {
       return const SizedBox.shrink();
     }
@@ -456,6 +662,188 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  Widget _buildDueSoonCard() {
+    if (_dueSoon.isEmpty) return const SizedBox.shrink();
+
+    String fmt(DateTime d) {
+      return '${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')} '
+          '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    }
+
+    final top = _dueSoon.take(10).toList();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _cardBackground,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.redAccent.withOpacity(0.25)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.notifications_active, color: Colors.redAccent, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                '마감 24시간 이내',
+                style: GoogleFonts.notoSansKr(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...top.map((e) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('• ', style: TextStyle(color: Colors.white70)),
+                  Expanded(
+                    child: Text(
+                      '[${e.timetableName}] ${e.courseTitle} · ${e.taskTitle}  (${fmt(e.deadline)})',
+                      style: GoogleFonts.notoSansKr(fontSize: 13, color: Colors.white70),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          if (_dueSoon.length > 3)
+            Text(
+              '외 ${_dueSoon.length - 3}개 더 있음',
+              style: GoogleFonts.notoSansKr(fontSize: 12, color: Colors.white54),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDrawerHeader() {
+    if (!_dDayEnabled) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                'PlanIT',
+                style: GoogleFonts.poppins(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary
+                )
+            ),
+            const SizedBox(height: 4),
+            Text(
+                '효율적인 대학 생활의 시작',
+                style: GoogleFonts.notoSansKr(
+                    fontSize: 13,
+                    color: _textSecondary
+                )
+            ),
+          ],
+        ),
+      );
+    }
+
+    String dDayStr = 'D-Day 설정하기';
+    String title = _dDayTitle ?? '중요한 일정';
+    Color dDayColor = _primaryColor;
+
+    if (_dDayDate != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final target = DateTime(_dDayDate!.year, _dDayDate!.month, _dDayDate!.day);
+      final diff = target.difference(today).inDays;
+
+      if (diff > 0) {
+        dDayStr = 'D-$diff';
+        dDayColor = const Color(0xFF6768F0);
+      }
+      else if (diff == 0) {
+        dDayStr = 'D-Day';
+        dDayColor = const Color(0xFFFF5252);
+      }
+      else {
+        dDayStr = 'D+${diff.abs()}';
+        dDayColor = Colors.grey;
+      }
+    } else {
+      dDayStr = '설정 필요';
+      title = '일정을 등록해주세요';
+    }
+
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context); // 메뉴 닫기
+        _showDDaySettingDialog(); // 설정창 열기
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 50, 20, 30),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2E2F5D),
+          border: Border(
+              bottom: BorderSide(
+                  color: Colors.white10)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                    Icons.timer,
+                    color: dDayColor,
+                    size: 20),
+                const SizedBox(width: 8),
+                Text(
+                    title,
+                    style: GoogleFonts.notoSansKr(
+                        fontSize: 14,
+                        color: _textSecondary
+                    )
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+                dDayStr,
+                style: GoogleFonts.poppins(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 1.0
+                )
+            ),
+            const SizedBox(height: 8),
+            Text(
+                '눌러서 수정하기 >',
+                style: GoogleFonts.notoSansKr(
+                    fontSize: 12,
+                    color: Colors.white30
+                )
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -485,8 +873,7 @@ class _MainScreenState extends State<MainScreen> {
           actions: [
             Container(
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(18),
@@ -521,49 +908,98 @@ class _MainScreenState extends State<MainScreen> {
         ),
         endDrawer: Drawer(
           backgroundColor: const Color(0xFF242548),
-          child: SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ListTile(
-                  title: Text(
-                    '설정 & 기타',
-                    style: GoogleFonts.notoSansKr(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
+          child: Column(
+            children: [
+              _buildDrawerHeader(),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  children: [
+                    ListTile(
+                      title: Text(
+                        '설정 & 기타',
+                        style: GoogleFonts.notoSansKr(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'PlanIT을 더 편하게 사용해보세요.',
+                        style: GoogleFonts.notoSansKr(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
-                  ),
-                  subtitle: Text(
-                    'PlanIT을 더 편하게 사용해보세요.',
-                    style: GoogleFonts.notoSansKr(
-                      color: Colors.white.withOpacity(0.7),
+                    const Divider(color: Colors.white10),
+                    ListTile(
+                      leading: const Icon(
+                          Icons.storefront,
+                          color: Colors.white70),
+                      title: Text(
+                        '포인트 상점',
+                        style: GoogleFonts.notoSansKr(
+                            color: Colors.white
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const StoreScreen(),
+                          ),
+                        ).then((_) async {
+                          await _loadStoreFeatures();
+                          await _refreshData();
+                        });
+                      },
                     ),
+                    ListTile(
+                      leading: const Icon(
+                          Icons.check_circle_outline,
+                          color: Colors.white70
+                      ),
+                      title: Text(
+                        '출석 체크',
+                        style: GoogleFonts.notoSansKr(
+                            color: Colors.white
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AttendanceScreen(),
+                          ),
+                        ).then((_) => _refreshData());
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Colors.white10),
+              ListTile(
+                contentPadding: const EdgeInsets.all(20),
+                leading: const Icon(
+                    Icons.exit_to_app,
+                    color: Colors.white54
+                ),
+                title: Text(
+                  '종료하기',
+                  style: GoogleFonts.notoSansKr(
+                    color: Colors.white70,
+                    fontSize: 15,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Divider(color: Colors.white24),
-                const Spacer(),
-                const Divider(color: Colors.white24),
-                ListTile(
-                  leading:
-                  const Icon(Icons.exit_to_app, color: Colors.white70),
-                  title: Text(
-                    '종료하기',
-                    style: GoogleFonts.notoSansKr(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showExitDialog();
-                  },
-                ),
-                const SizedBox(height: 28),
-              ],
-            ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showExitDialog();
+                },
+              ),
+            ],
           ),
         ),
         body: SafeArea(
@@ -584,6 +1020,7 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                   const SizedBox(height: 18),
                   _buildDailyQuoteCard(),
+                  _buildDueSoonCard(),
                   GridView.count(
                     crossAxisCount: 2,
                     shrinkWrap: true,
@@ -725,8 +1162,7 @@ class _MainScreenState extends State<MainScreen> {
                 top: 0,
                 right: 0,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.pinkAccent,
                     borderRadius: BorderRadius.circular(999),
@@ -790,8 +1226,7 @@ class _MainScreenState extends State<MainScreen> {
           _buildStatBar(
             title: '출석률',
             value: _attendanceRate,
-            displayText:
-            '$_attendanceDays/7일 (${(_attendanceRate * 100).toInt()}%)',
+            displayText: '$_attendanceDays/7일 (${(_attendanceRate * 100).toInt()}%)',
           ),
           const SizedBox(height: 16),
           _buildStatBar(
