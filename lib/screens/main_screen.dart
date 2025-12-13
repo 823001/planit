@@ -94,109 +94,106 @@ class _MainScreenState extends State<MainScreen> {
     DateTime selectedDate = _dDayDate ?? DateTime.now();
 
     await showDialog(
-     context: context,
-     builder: (context) {
-       return AlertDialog(
-         backgroundColor: _cardBackground,
-         title: Text(
-           'D-Day 설정',
-           style: TextStyle(
-             color: _textPrimary
-           )
-         ),
-         content: SingleChildScrollView(
-           child: Column(
-             mainAxisSize: MainAxisSize.min,
-             children: [
-               TextField(
-                 controller: titleController,
-                 style: TextStyle(
-                   color: _textPrimary
-                 ),
-                 decoration: InputDecoration(
-                   hintText: '일정 이름',
-                   hintStyle: TextStyle(
-                     color: Colors.white38
-                   ),
-                   enabledBorder:
-                     const UnderlineInputBorder(
-                       borderSide: BorderSide(
-                         color: Colors.white24
-                       )
-                     ),
-                   focusedBorder: UnderlineInputBorder(
-                     borderSide: BorderSide(
-                       color: _primaryColor
-                     )
-                   ),
-                 ),
-               ),
-               const SizedBox(height:20),
-               SizedBox(
-                 height: 350,
-                 width: double.maxFinite,
-                 child: Theme(
-                   data: Theme.of(context).copyWith(
-                     colorScheme: ColorScheme.dark(
-                       primary: _primaryColor,
-                       onPrimary: Colors.white,
-                       surface: _cardBackground,
-                       onSurface: Colors.white,
-                     ),
-                   ),
-                   child: CalendarDatePicker(
-                     initialDate: selectedDate,
-                     firstDate: DateTime.now().subtract(
-                       const Duration(days:365)
-                     ),
-                     lastDate: DateTime.now().add(
-                       const Duration(days: 365*2)
-                     ),
-                     onDateChanged: (date) => selectedDate = date,
-                   ),
-                 ),
-               ),
-             ],
-           ),
-         ),
-         actions: [
-           TextButton(
-             onPressed: () => Navigator.pop(context),
-             child: const Text(
-               '취소',
-               style: TextStyle(
-                 color: Colors.white60
-               )
-             ),
-           ),
-           TextButton(
-             onPressed: () async {
-               final prefs = await SharedPreferences.getInstance();
-               await prefs.setString(
-                   'dday_title',
-                   titleController.text
-               );
-               await prefs.setString(
-                   'dday_date',
-                   selectedDate.toIso8601String()
-               );
-               setState((){
-                 _dDayTitle = titleController.text;
-                 _dDayDate = selectedDate;
-               });
-               Navigator.pop(context);
-             },
-             child: Text(
-               '저장',
-               style: TextStyle(
-                 color: _primaryColor,
-                 fontWeight: FontWeight.bold
-               )
-             ),
-           ),
-         ],
-       );
-     },
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: _cardBackground,
+          title: Text(
+              'D-Day 설정',
+              style: TextStyle(
+                  color: _textPrimary
+              )
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  style: TextStyle(color: _textPrimary),
+                  decoration: InputDecoration(
+                    hintText: '일정 이름 (예: 종강)',
+                    hintStyle: TextStyle(
+                        color: Colors.white38
+                    ),
+                    enabledBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(
+                            color: Colors.white24
+                        )
+                    ),
+                    focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(
+                            color: _primaryColor
+                        )
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 350,
+                  width: double.maxFinite,
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      colorScheme: ColorScheme.dark(
+                        primary: _primaryColor,
+                        onPrimary: Colors.white,
+                        surface: _cardBackground,
+                        onSurface: Colors.white,
+                      ),
+                    ),
+                    child: CalendarDatePicker(
+                      initialDate: selectedDate,
+                      firstDate: DateTime.now().subtract(
+                          const Duration(days: 365)
+                      ),
+                      lastDate: DateTime.now().add(
+                          const Duration(days: 365 * 2)
+                      ),
+                      onDateChanged: (date) => selectedDate = date,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                  '취소',
+                  style: TextStyle(
+                      color: Colors.white60
+                  )
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString(
+                    'dday_title',
+                    titleController.text
+                );
+                await prefs.setString(
+                    'dday_date',
+                    selectedDate.toIso8601String()
+                );
+                setState(() {
+                  _dDayTitle = titleController.text;
+                  _dDayDate = selectedDate;
+                });
+                Navigator.pop(context);
+              },
+              child: Text(
+                  '저장',
+                  style: TextStyle(
+                      color: _primaryColor,
+                      fontWeight: FontWeight.bold
+                  )
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -789,8 +786,8 @@ class _MainScreenState extends State<MainScreen> {
 
     return InkWell(
       onTap: () {
-        Navigator.pop(context); // 메뉴 닫기
-        _showDDaySettingDialog(); // 설정창 열기
+        Navigator.pop(context);
+        _showDDaySettingDialog();
       },
       child: Container(
         width: double.infinity,
