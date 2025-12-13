@@ -255,28 +255,61 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _loadStoreFeatures() async {
-    final prefs = await SharedPreferences.getInstance();
-    final owned = prefs.getStringList('ownedStoreItems') ?? [];
+    final user = _auth.currentUser;
 
-    final enabled = owned.contains('feature_daily_quote');
-
-    setState(() {
-      _dailyQuoteEnabled = enabled;
-    });
-
-    if (enabled) {
-      await _loadQuotesFromFirestore();
-      await _initTodayQuote();
-    } else {
+    if (user == null) {
+      if (!mounted) return;
       setState(() {
+        _dailyQuoteEnabled = false;
+        _dDayEnabled = false;
+        _todayQuote = null;
+      });
+      return;
+    }
+
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      final data = doc.data();
+
+      // Firestore: users/{uid}/ownedItems (배열)
+      final List<dynamic>? ownedListFromFirebase = data?['ownedItems'];
+      final owned = ownedListFromFirebase == null
+          ? <String>[]
+          : ownedListFromFirebase.whereType<String>().toList();
+
+      final dailyQuoteEnabled = owned.contains('feature_daily_quote');
+      final dDayEnabled = owned.contains('feature_dday');
+
+      if (!mounted) return;
+      setState(() {
+        _dailyQuoteEnabled = dailyQuoteEnabled;
+        _dDayEnabled = dDayEnabled;
+      });
+
+      if (dailyQuoteEnabled) {
+        await _loadQuotesFromFirestore();
+        await _initTodayQuote();
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _todayQuote = null;
+        });
+      }
+
+      if (dDayEnabled) {
+        await _loadDDayData();
+      }
+    } catch (e) {
+      debugPrint('Store feature 로드 오류: $e');
+      if (!mounted) return;
+      setState(() {
+        _dailyQuoteEnabled = false;
+        _dDayEnabled = false;
         _todayQuote = null;
       });
     }
-
-    final dDayEnabled = owned.contains('feature_dday');
-    setState(() => _dDayEnabled = dDayEnabled);
-    if (dDayEnabled) _loadDDayData();
   }
+
 
   Future<void> _refreshData() async {
     await _loadPoints();

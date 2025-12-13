@@ -376,13 +376,33 @@ class _CourseTodoScreenState extends State<CourseTodoScreen> {
   }
 
   Future<void> _loadFeatureFlags() async {
-    final prefs = await SharedPreferences.getInstance();
-    final owned = prefs.getStringList('ownedStoreItems') ?? [];
-    if (!mounted) return;
-    setState(() {
-      _confettiEnabled = owned.contains('feature_confetti');
-    });
+    final user = _auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      setState(() => _confettiEnabled = false);
+      return;
+    }
+
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      final data = doc.data();
+
+      final List<dynamic>? ownedListFromFirebase = data?['ownedItems'];
+      final owned = ownedListFromFirebase == null
+          ? <String>[]
+          : ownedListFromFirebase.whereType<String>().toList();
+
+      if (!mounted) return;
+      setState(() {
+        _confettiEnabled = owned.contains('feature_confetti');
+      });
+    } catch (e) {
+      debugPrint('feature_confetti 로드 오류: $e');
+      if (!mounted) return;
+      setState(() => _confettiEnabled = false);
+    }
   }
+
 
   CollectionReference<Map<String, dynamic>> _tasksRef(User user) {
     return _firestore
