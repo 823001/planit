@@ -121,7 +121,6 @@ class _StoreScreenState extends State<StoreScreen> {
 
   void _initItems() {
     _items = [
-      // 테마
       StoreItem(
         id: 'theme_default',
         title: '기본 테마',
@@ -147,8 +146,6 @@ class _StoreScreenState extends State<StoreScreen> {
         category: StoreCategory.theme,
         icon: Icons.dark_mode,
       ),
-
-      // 앱 아이콘
       StoreItem(
         id: 'icon_default',
         title: '기본 아이콘',
@@ -174,8 +171,6 @@ class _StoreScreenState extends State<StoreScreen> {
         category: StoreCategory.appIcon,
         icon: Icons.circle_outlined,
       ),
-
-      // 기능 아이템
       StoreItem(
         id: 'feature_confetti',
         title: '완료 축하 효과',
@@ -214,46 +209,58 @@ class _StoreScreenState extends State<StoreScreen> {
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // 🔹 1) Firestore에서 포인트 읽기
     int pts = 0;
+    Set<String> ownedSet = {};
+
+    String savedThemeId =
+        prefs.getString('selectedThemeItemId') ?? 'theme_default';
+    String savedIconId =
+        prefs.getString('selectedIconItemId') ?? 'icon_default';
+
     final user = _auth.currentUser;
     if (user != null) {
       try {
         final doc = await _firestore.collection('users').doc(user.uid).get();
         final data = doc.data();
+
         final p = data?['points'];
         if (p is int) {
           pts = p;
         } else if (p is num) {
           pts = p.toInt();
         }
+
+        final List<dynamic>? ownedListFromFirebase = data?['ownedItems'];
+        if (ownedListFromFirebase != null) {
+          ownedSet.addAll(ownedListFromFirebase.whereType<String>());
+        }
       } catch (e) {
-        debugPrint('StoreScreen 포인트 로드 오류: $e');
+        debugPrint('StoreScreen 데이터 로드 오류: $e');
       }
     }
 
-    // 🔹 2) 나머지(보유 아이템, 테마, 아이콘)는 기존처럼 SharedPreferences 사용
-    final ownedList = prefs.getStringList('ownedStoreItems') ?? [];
-    final savedThemeId = prefs.getString('selectedThemeItemId');
-    final savedIconId = prefs.getString('selectedIconItemId');
-
-    final ownedSet = ownedList.toSet();
     for (final item in _items.where((e) => e.cost == 0)) {
       ownedSet.add(item.id);
     }
 
-    String themeId = savedThemeId ?? 'theme_default';
-    if (!_items.any((e) => e.id == themeId && e.category == StoreCategory.theme)) {
+    String themeId = savedThemeId;
+    if (!_items.any((e) =>
+    e.id == themeId &&
+        e.category == StoreCategory.theme &&
+        ownedSet.contains(themeId))) {
       themeId = 'theme_default';
     }
 
-    String iconId = savedIconId ?? 'icon_default';
-    if (!_items.any((e) => e.id == iconId && e.category == StoreCategory.appIcon)) {
+    String iconId = savedIconId;
+    if (!_items.any((e) =>
+    e.id == iconId &&
+        e.category == StoreCategory.appIcon &&
+        ownedSet.contains(iconId))) {
       iconId = 'icon_default';
     }
 
     setState(() {
-      _points = pts;                       // 🔹 여기서 Firestore에서 읽어온 값 사용
+      _points = pts;
       _ownedItemIds = ownedSet;
       _selectedThemeItemId = themeId;
       _selectedIconItemId = iconId;
@@ -266,11 +273,8 @@ class _StoreScreenState extends State<StoreScreen> {
     });
   }
 
-
-  Future<void> _saveData() async {
+  Future<void> _savePrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    // await prefs.setInt('points', _points);
-    await prefs.setStringList('ownedStoreItems', _ownedItemIds.toList());
     await prefs.setString('selectedThemeItemId', _selectedThemeItemId);
     await prefs.setString('selectedIconItemId', _selectedIconItemId);
   }
@@ -289,6 +293,18 @@ class _StoreScreenState extends State<StoreScreen> {
     }
   }
 
+  Future<void> _addOwnedItemToFirestore(String itemId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      await _firestore.collection('users').doc(user.uid).set({
+        'ownedItems': FieldValue.arrayUnion([itemId]),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('StoreScreen ownedItems 저장 오류: $e');
+    }
+  }
 
   Future<void> _buyItem(StoreItem item) async {
     if (item.id == 'item_random_box') {
@@ -303,20 +319,19 @@ class _StoreScreenState extends State<StoreScreen> {
         _points -= item.cost;
       });
 
-      final randomPoint = (Random().nextInt(10)+1) * 5;
+      final randomPoint = (Random().nextInt(10) + 1) * 5;
 
-      setState((){
+      setState(() {
         _points += randomPoint;
       });
 
       await _savePointsToFirestore();
-      await _saveData();
+      await _savePrefs();
 
       if (mounted) {
         _showGachaResultDialog(randomPoint);
       }
       return;
-
     }
 
     if (item.isOwned) {
@@ -345,17 +360,16 @@ class _StoreScreenState extends State<StoreScreen> {
       }
     });
 
-    // 🔹 Firestore 포인트 반영
     await _savePointsToFirestore();
+    await _addOwnedItemToFirestore(item.id);
+    await _savePrefs();
 
-    // 🔹 로컬(보유 아이템/테마/아이콘) 저장
-    await _saveData();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('\'${item.title}\'를(을) 구매했어요!')),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('\'${item.title}\'를(을) 구매했어요!')),
+      );
+    }
   }
-
 
   Future<void> _applyItem(StoreItem item) async {
     if (!item.isOwned) {
@@ -366,7 +380,6 @@ class _StoreScreenState extends State<StoreScreen> {
     }
 
     if (item.category == StoreCategory.feature) {
-      // 기능 아이템은 구매만 해도 항상 활성 상태라고 가정
       return;
     }
 
@@ -378,15 +391,16 @@ class _StoreScreenState extends State<StoreScreen> {
       }
     });
 
-    await _saveData();
+    await _savePrefs();
 
     final what = item.category == StoreCategory.theme ? '테마' : '앱 아이콘';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('\'${item.title}\' $what를 적용했어요.')),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('\'${item.title}\' $what를 적용했어요.')),
+      );
+    }
   }
 
-  // 현재 선택된 아이콘/라벨
   IconData get _currentIconData {
     switch (_selectedIconItemId) {
       case 'icon_blue_planet':
@@ -455,7 +469,6 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  // 메인·출석 화면과 동일한 포인트 UI
   Widget _buildPointChip({required int points}) {
     final isLight = _isLightTheme;
 
@@ -497,7 +510,6 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  // 상단 인포 카드
   Widget _buildHeaderCard() {
     return Container(
       width: double.infinity,
@@ -567,13 +579,11 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  // 카테고리별 리스트
   Widget _buildItemList() {
     final sections = <Widget>[];
 
     for (final category in StoreCategory.values) {
-      final categoryItems =
-      _items.where((item) => item.category == category).toList();
+      final categoryItems = _items.where((item) => item.category == category).toList();
       if (categoryItems.isEmpty) continue;
 
       sections.add(
@@ -590,9 +600,7 @@ class _StoreScreenState extends State<StoreScreen> {
         ),
       );
 
-      sections.addAll(
-        categoryItems.map(_buildItemTile),
-      );
+      sections.addAll(categoryItems.map(_buildItemTile));
     }
 
     return ListView(children: sections);
@@ -741,7 +749,7 @@ class _StoreScreenState extends State<StoreScreen> {
           style: TextStyle(
             fontSize: 10,
             color: Colors.grey,
-            height:1.0,
+            height: 1.0,
           ),
         ),
         const SizedBox(height: 2),
@@ -842,7 +850,7 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  void _showGachaResultDialog(int earnedPoint){
+  void _showGachaResultDialog(int earnedPoint) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -851,21 +859,20 @@ class _StoreScreenState extends State<StoreScreen> {
           backgroundColor: const Color(0xFF262744),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Center(
-            child: Icon(Icons.stars, size:48, color: Color(0xFFE9C46A)),
+            child: Icon(Icons.stars, size: 48, color: Color(0xFFE9C46A)),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
                 '축하합니다! 🎉',
-                style: TextStyle (
+                style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
               ),
               const SizedBox(height: 16),
-
               Text(
                 '$earnedPoint P',
                 style: const TextStyle(
@@ -874,12 +881,10 @@ class _StoreScreenState extends State<StoreScreen> {
                   fontWeight: FontWeight.w900,
                 ),
               ),
-
               const SizedBox(height: 8),
-
               const Text(
                 '를 획득했어요!',
-                style: TextStyle(color: Colors.white70, fontSize:14),
+                style: TextStyle(color: Colors.white70, fontSize: 14),
               ),
             ],
           ),
