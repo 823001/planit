@@ -361,19 +361,25 @@ class _MainScreenState extends State<MainScreen> {
       int totalTasks = 0;
       int completedTasks = 0;
 
-      final coursesSnap = await _firestore
+      final timetablesSnap = await _firestore
           .collection('users')
           .doc(user.uid)
-          .collection('courses')
+          .collection('timetables')
           .get();
 
-      for (var courseDoc in coursesSnap.docs) {
-        final tasksSnap = await courseDoc.reference.collection('tasks').get();
+      for (var ttDoc in timetablesSnap.docs) {
+        final coursesSnap = await ttDoc.reference.collection('courses').get();
 
-        for (var taskDoc in tasksSnap.docs) {
-          totalTasks++;
-          final isDone = taskDoc.data()['isDone'] as bool? ?? false;
-          if (isDone) completedTasks++;
+        for (var courseDoc in coursesSnap.docs) {
+          final tasksSnap = await courseDoc.reference.collection('tasks').get();
+
+          for (var taskDoc in tasksSnap.docs) {
+            totalTasks++;
+
+            if (taskDoc.data()['isDone'] == true) {
+              completedTasks++;
+            }
+          }
         }
       }
 
@@ -389,9 +395,10 @@ class _MainScreenState extends State<MainScreen> {
         });
       }
     } catch (e) {
-      print('할 일 통계 로드 오류: $e');
+      debugPrint('할 일 통계 로드 오류: $e');
     }
   }
+
 
   Future<void> _loadAttendanceStats() async {
     final user = _auth.currentUser;
